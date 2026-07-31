@@ -10,7 +10,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
-import { createToolAction, deleteToolAction } from '@/app/(app)/admin/actions';
+import { createToolAction, deleteToolAction, updateToolAction } from '@/app/(app)/admin/actions';
 import { Badge, Button, Card, TextInput } from '@/components/ui/kit';
 import ToolIcon from '@/components/ui/ToolIcon';
 import { CATEGORY_LABELS, TOOL_KIND_LABELS } from '@/lib/tool-labels';
@@ -115,7 +115,20 @@ export default function AdminTools({ tools }: { tools: Tool[] }) {
             </thead>
             <tbody>
               {tools.map((t) => (
-                <tr key={t.id} className="border-b border-line last:border-0">
+                <ToolRow key={t.id} tool={t} pending={pending} remove={remove} save={(title, description) => start(async () => { await updateToolAction(t.id, { title, description }); router.refresh(); })} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function ToolRow({ tool: t, pending, remove, save }: { tool: Tool; pending: boolean; remove: (id: string) => void; save: (title: string, description: string) => void }) {
+  const [editing, setEditing] = useState(false); const [title, setTitle] = useState(t.title); const [description, setDescription] = useState(t.description);
+  return editing ? <tr className="border-b border-line"><td colSpan={4} className="p-3"><div className="grid gap-2 md:grid-cols-[1fr_2fr_auto]"><TextInput value={title} onChange={(e) => setTitle(e.target.value)} /><TextInput value={description} onChange={(e) => setDescription(e.target.value)} /><div className="flex gap-2"><Button disabled={pending} onClick={() => { save(title, description); setEditing(false); }}>Сохранить</Button><Button variant="ghost" onClick={() => setEditing(false)}>Отмена</Button></div></div></td></tr> : (
+                <tr className="border-b border-line last:border-0">
                   <td className="px-4 py-3">
                     <p className="flex items-center gap-2 font-medium text-ink">
                       <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-soft text-brand-ink">
@@ -131,19 +144,7 @@ export default function AdminTools({ tools }: { tools: Tool[] }) {
                   <td className="px-4 py-3 text-ink-soft">{TOOL_KIND_LABELS[t.kind]}</td>
                   <td className="px-4 py-3 text-right">
                     <button
-                      onClick={() => remove(t.id)}
-                      disabled={pending}
-                      className="text-xs text-danger hover:underline"
-                    >
-                      Удалить
-                    </button>
+                      onClick={() => setEditing(true)} className="mr-3 text-xs text-brand">Изменить</button><button onClick={() => remove(t.id)} disabled={pending} className="text-xs text-danger hover:underline">Удалить</button>
                   </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </div>
-  );
+                </tr>);
 }

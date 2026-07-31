@@ -14,17 +14,25 @@ import Link from 'next/link';
 import AdminTemplates from '@/components/admin/AdminTemplates';
 import AdminTools from '@/components/admin/AdminTools';
 import { Badge, Card, btnClass } from '@/components/ui/kit';
-import ToolIcon from '@/components/ui/ToolIcon';
 import { CATEGORY_LABELS } from '@/lib/tool-labels';
 import { getRepo } from '@/lib/repo';
 import type { ToolCategory } from '@/lib/types';
+import { requireSession } from '@/lib/auth';
+import AdminPlatformManager from '@/components/admin/AdminPlatformManager';
+import AdminBusinessTypes from '@/components/admin/AdminBusinessTypes';
+import AdminRecommendationRules from '@/components/admin/AdminRecommendationRules';
 
 export default async function AdminPage() {
+  await requireSession(['platform_admin']);
   const repo = await getRepo();
-  const [tools, templates, businessTypes] = await Promise.all([
+  const [tools, templates, businessTypes, businesses, users, plans, recommendationSettings] = await Promise.all([
     repo.listTools(),
     repo.listTemplates(),
     repo.listBusinessTypes(),
+    repo.listBusinesses(),
+    repo.listUsers(),
+    repo.listPlans(),
+    repo.listRecommendationSettings(),
   ]);
 
   return (
@@ -52,16 +60,13 @@ export default async function AdminPage() {
         </Card>
         <Card>
           <h2 className="mb-2 font-semibold text-ink">Типы бизнеса</h2>
-          <div className="flex flex-wrap gap-2">
-            {businessTypes.map((bt) => (
-              <Badge key={bt.id} tone="muted">
-                <ToolIcon name={bt.icon} size={13} />
-                {bt.title}
-              </Badge>
-            ))}
-          </div>
+          <AdminBusinessTypes types={businessTypes} />
         </Card>
       </div>
+
+      <AdminPlatformManager businesses={businesses} users={users} plans={plans} />
+
+      <AdminRecommendationRules settings={recommendationSettings} />
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-ink">Инструменты каталога ({tools.length})</h2>

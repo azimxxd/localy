@@ -8,31 +8,37 @@
 
 import Link from 'next/link';
 import LaunchButton from '@/components/promos/LaunchButton';
+import PromoActions from '@/components/promos/PromoActions';
 import { Badge, Card, EmptyState, Stat } from '@/components/ui/kit';
 import { SEGMENT_META } from '@/lib/engine';
 import { kzt, num, percent } from '@/lib/format';
 import { PROMO_KIND_LABELS, PROMO_STATUS_LABELS } from '@/lib/promo-labels';
 import { getRepo } from '@/lib/repo';
+import { requireSession } from '@/lib/auth';
+import { getActiveBusiness } from '@/lib/demo';
 
 export default async function PromoResultPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireSession(['owner', 'admin', 'marketer']);
   const { id } = await params;
   const repo = await getRepo();
   const promo = await repo.getPromo(id);
-  if (!promo) {
+  const business = await getActiveBusiness();
+  if (!promo || promo.businessId !== business.id) {
     return <EmptyState title="Акция не найдена" />;
   }
 
-  const hasRun = promo.status === 'active' || promo.status === 'finished';
+  const hasRun = promo.status === 'active' || promo.status === 'paused' || promo.status === 'finished';
   const funnel = hasRun ? await repo.getPromoFunnel(id) : null;
 
   const stages = funnel
     ? [
         { label: 'Получили', value: funnel.sent },
         { label: 'Открыли', value: funnel.opened },
+        { label: 'Перешли', value: funnel.clicked },
         { label: 'Пришли', value: funnel.visited },
         { label: 'Использовали', value: funnel.redeemed },
       ]
@@ -57,6 +63,8 @@ export default async function PromoResultPage({
           {PROMO_STATUS_LABELS[promo.status]}
         </Badge>
       </header>
+
+      <PromoActions promo={promo} />
 
       {funnel ? (
         <>

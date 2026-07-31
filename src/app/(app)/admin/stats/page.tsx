@@ -10,8 +10,10 @@ import Link from 'next/link';
 import { Card, EmptyState, Stat } from '@/components/ui/kit';
 import { num } from '@/lib/format';
 import { getRepo } from '@/lib/repo';
+import { requireSession } from '@/lib/auth';
 
 export default async function AdminStatsPage() {
+  await requireSession(['platform_admin']);
   const repo = await getRepo();
   const [stats, businessTypes] = await Promise.all([
     repo.getPlatformStats(),

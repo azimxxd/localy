@@ -2,7 +2,7 @@
  * Localy — реализация Repo поверх Supabase.
  *
  * Вызывающие: getRepo() из src/lib/repo/index.ts, только когда заданы
- * NEXT_PUBLIC_SUPABASE_URL и NEXT_PUBLIC_SUPABASE_ANON_KEY.
+ * LOCALY_REPO=supabase и заданы ключи Supabase.
  *
  * СТАТУС: заглушка. Таблицы и миграции — /supabase/migrations, методы
  * переносятся сюда группами из mock.ts по мере готовности схемы.

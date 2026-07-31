@@ -1,36 +1,34 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Localy
 
-## Getting Started
+Localy — локальная CRM и платформа лояльности для малого бизнеса. В MVP есть ASCII-интерфейс, онбординг, касса с QR, CRM, акции, рассылки, публичный сайт с записью, аналитика, тарифы и админ-панель.
 
-First, run the development server:
+## Запуск
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Откройте <http://localhost:3000>. Демо-данные детерминированы и хранятся в `data/localy.json`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Демо-вход
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Пароль всех аккаунтов: `Localy2026`.
 
-## Learn More
+- `owner@localy.kz` — владелец
+- `admin@localy.kz` — администратор бизнеса
+- `marketing@localy.kz` — маркетолог
+- `cashier@localy.kz` — кассир
+- `platform@localy.kz` — админ Localy
 
-To learn more about Next.js, take a look at the following resources:
+## Проверка
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run lint
+npm run build
+npm run smoke:e2e
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`smoke:e2e` запускает изолированный production-сервер и проверяет основной сценарий в headless Chrome: онбординг, QR, кассу, бонусы, CRM, рассылки, роли, админку и публичную заявку.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+По умолчанию приложение использует полностью рабочее JSON-хранилище. Supabase-адаптер пока заглушка и включается только явно через `LOCALY_REPO=supabase`.

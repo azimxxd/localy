@@ -11,18 +11,18 @@ import { cn } from '@/lib/cn';
 export type Tone = 'brand' | 'success' | 'warning' | 'danger' | 'muted';
 
 const TONE_CLASSES: Record<Tone, string> = {
-  brand: 'bg-brand-soft text-brand-ink',
-  success: 'bg-ok-soft text-ok',
-  warning: 'bg-warn-soft text-warn',
-  danger: 'bg-danger-soft text-danger',
-  muted: 'bg-canvas text-ink-soft',
+  brand: 'border-brand/70 bg-brand-soft text-brand',
+  success: 'border-ok/50 bg-ok-soft text-ok',
+  warning: 'border-warn/50 bg-warn-soft text-warn',
+  danger: 'border-danger/50 bg-danger-soft text-danger',
+  muted: 'border-line bg-canvas text-ink-soft',
 };
 
 export function Card({ className, children }: { className?: string; children: React.ReactNode }) {
   return (
     <div
       className={cn(
-        'rounded-card border border-line bg-surface p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]',
+        'ascii-panel border border-line bg-surface p-5',
         className,
       )}
     >
@@ -43,7 +43,7 @@ export function SectionTitle({
   return (
     <div className="mb-3 flex items-end justify-between gap-3">
       <div>
-        <h2 className="text-lg font-semibold text-ink">{title}</h2>
+        <h2 className="text-base font-semibold uppercase tracking-[0.08em] text-ink">+-- {title} --+</h2>
         {hint ? <p className="mt-0.5 text-sm text-ink-soft">{hint}</p> : null}
       </div>
       {action}
@@ -62,8 +62,8 @@ export function Stat({
 }) {
   return (
     <Card className="p-4">
-      <p className="text-sm text-ink-soft">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tnum">{value}</p>
+      <p className="text-xs uppercase tracking-[0.1em] text-ink-soft">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tnum text-brand">{value}</p>
       {sub ? <p className="mt-1 text-xs text-ink-soft">{sub}</p> : null}
     </Card>
   );
@@ -81,7 +81,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium',
+        'inline-flex items-center gap-1 border px-2 py-0.5 text-xs font-medium uppercase tracking-wide',
         TONE_CLASSES[tone],
         className,
       )}
@@ -94,13 +94,13 @@ export function Badge({
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 const BTN_BASE =
-  'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex items-center justify-center gap-2 border px-4 py-2.5 text-sm font-semibold uppercase tracking-[0.04em] transition-colors disabled:cursor-not-allowed disabled:opacity-50';
 
 const BTN_VARIANT: Record<ButtonVariant, string> = {
-  primary: 'bg-brand text-white hover:bg-brand-ink',
-  secondary: 'border border-line bg-surface text-ink hover:bg-canvas',
-  ghost: 'text-ink-soft hover:bg-canvas',
-  danger: 'bg-danger text-white hover:brightness-95',
+  primary: 'border-brand bg-brand text-canvas hover:bg-transparent hover:text-brand',
+  secondary: 'border-line bg-surface text-ink hover:border-brand hover:text-brand',
+  ghost: 'border-transparent text-ink-soft hover:border-line hover:text-ink',
+  danger: 'border-danger bg-danger text-canvas hover:bg-transparent hover:text-danger',
 };
 
 /** Классы кнопки — для случаев, когда нужен <a>/<Link> вместо <button>. */
@@ -125,14 +125,14 @@ export function TextInput({
   return (
     <label className="block">
       {label ? <span className="mb-1 block text-sm font-medium text-ink">{label}</span> : null}
-      <input
+      <div className="relative"><span aria-hidden className="absolute left-3 top-2.5 text-brand">&gt;</span><input
         className={cn(
-          'w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-ink outline-none',
-          'placeholder:text-ink-soft focus:border-brand focus:ring-2 focus:ring-brand-soft',
+          'w-full border border-line bg-canvas py-2.5 pl-7 pr-3.5 text-ink outline-none',
+          'placeholder:text-ink-soft focus:border-brand',
           className,
         )}
         {...props}
-      />
+      /></div>
       {hint ? <span className="mt-1 block text-xs text-ink-soft">{hint}</span> : null}
     </label>
   );
@@ -140,7 +140,7 @@ export function TextInput({
 
 export function EmptyState({ title, hint }: { title: string; hint?: string }) {
   return (
-    <div className="rounded-card border border-dashed border-line px-6 py-10 text-center">
+    <div className="border border-dashed border-line px-6 py-10 text-center">
       <p className="font-medium text-ink">{title}</p>
       {hint ? <p className="mt-1 text-sm text-ink-soft">{hint}</p> : null}
     </div>
@@ -151,7 +151,7 @@ export function Spinner({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        'inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent',
+        'inline-block h-4 w-4 animate-spin border border-current border-t-transparent',
         className,
       )}
       aria-hidden

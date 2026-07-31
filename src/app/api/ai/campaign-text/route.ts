@@ -17,6 +17,7 @@ import { campaignTextTemplate } from '@/lib/ai/templates';
 import { SEGMENT_META } from '@/lib/engine';
 import { getRepo } from '@/lib/repo';
 import { MAX_CAMPAIGNS_PER_MONTH, type NotificationChannel, type SegmentCode } from '@/lib/types';
+import { getSession } from '@/lib/auth';
 
 interface Body {
   businessId?: string;
@@ -57,6 +58,12 @@ export async function POST(request: Request) {
   const { businessId, segment, channel, promoId } = body;
   if (!businessId || !segment || !channel) {
     return Response.json({ error: 'Нужны поля businessId, segment, channel' }, { status: 400 });
+  }
+
+  const session = await getSession();
+  if (!session) return Response.json({ error: 'Требуется вход' }, { status: 401 });
+  if (session.businessId !== businessId || !['owner', 'admin', 'marketer'].includes(session.role)) {
+    return Response.json({ error: 'Нет доступа к бизнесу' }, { status: 403 });
   }
 
   const repo = await getRepo();

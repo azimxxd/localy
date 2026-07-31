@@ -10,19 +10,19 @@
 
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
-const BRAND = '#6d3fe6';
+const BRAND = '#c7ff00';
 
 export function WeekdayChart({ data }: { data: { name: string; visits: number }[] }) {
   return (
     <ResponsiveContainer width="100%" height={200}>
       <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-        <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
-        <YAxis tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} allowDecimals={false} />
+        <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#919a78', fontFamily: 'monospace' }} axisLine={{ stroke: '#384329' }} tickLine={false} />
+        <YAxis tick={{ fontSize: 12, fill: '#919a78', fontFamily: 'monospace' }} axisLine={false} tickLine={false} allowDecimals={false} />
         <Tooltip
-          cursor={{ fill: '#f1ebff' }}
-          contentStyle={{ borderRadius: 12, border: '1px solid #e4e8f0', fontSize: 13 }}
+          cursor={{ fill: '#1c290d' }}
+          contentStyle={{ borderRadius: 0, border: '1px solid #c7ff00', background: '#11180c', color: '#e4e9d3', fontSize: 13, fontFamily: 'monospace' }}
         />
-        <Bar dataKey="visits" radius={[6, 6, 0, 0]}>
+        <Bar dataKey="visits">
           {data.map((_, i) => (
             <Cell key={i} fill={BRAND} />
           ))}

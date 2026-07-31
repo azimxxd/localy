@@ -46,8 +46,8 @@ export default function LiveFeed({
   return (
     <Card>
       <SectionTitle
-        title="Лента операций"
-        hint="Обновляется сама, когда кассир пробивает покупку"
+        title="Последние события"
+        hint="Только важные операции"
         action={
           <Badge tone={connected ? 'success' : 'muted'}>
             <span
@@ -55,7 +55,7 @@ export default function LiveFeed({
                 connected ? 'bg-ok' : 'bg-ink-soft'
               }`}
             />
-            {connected ? 'В реальном времени' : 'Подключение…'}
+            {connected ? 'live' : 'связь…'}
           </Badge>
         }
       />
@@ -64,8 +64,9 @@ export default function LiveFeed({
           Пока нет операций. Пробейте покупку на кассе — строка появится здесь.
         </p>
       ) : (
+        <>
         <ul className="divide-y divide-line">
-          {rows.map((row) => (
+          {rows.slice(0, 3).map((row) => (
             <li
               key={row.id}
               className={`flex items-center justify-between gap-3 py-3 ${
@@ -93,6 +94,20 @@ export default function LiveFeed({
             </li>
           ))}
         </ul>
+        {rows.length > 3 ? (
+          <details className="ascii-details mt-3 border-t border-line pt-3">
+            <summary className="text-xs uppercase tracking-wide text-ink-soft hover:text-brand">Показать весь журнал ({rows.length})</summary>
+            <ul className="mt-3 divide-y divide-line">
+              {rows.slice(3).map((row) => (
+                <li key={row.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                  <div className="min-w-0"><p className="truncate text-ink">{row.customerName}</p><p className="truncate text-xs text-ink-soft">{feedKindLabel(row.kind)} · {timeShort(row.at)}</p></div>
+                  <span className="tnum text-ink-soft">{row.amount > 0 ? kzt(row.amount) : `${row.pointsDelta >= 0 ? '+' : '−'}${num(Math.abs(row.pointsDelta))}`}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+        </>
       )}
     </Card>
   );

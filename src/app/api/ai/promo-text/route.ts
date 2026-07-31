@@ -17,6 +17,7 @@ import { promoTextTemplate, type PromoText } from '@/lib/ai/templates';
 import { SEGMENT_META } from '@/lib/engine';
 import { getRepo } from '@/lib/repo';
 import type { PromoKind, SegmentCode } from '@/lib/types';
+import { getSession } from '@/lib/auth';
 
 interface Body {
   businessId?: string;
@@ -49,6 +50,12 @@ export async function POST(request: Request) {
       { error: 'Нужны поля businessId, kind, value, segment' },
       { status: 400 },
     );
+  }
+
+  const session = await getSession();
+  if (!session) return Response.json({ error: 'Требуется вход' }, { status: 401 });
+  if (session.businessId !== businessId || !['owner', 'admin', 'marketer'].includes(session.role)) {
+    return Response.json({ error: 'Нет доступа к бизнесу' }, { status: 403 });
   }
 
   const repo = await getRepo();

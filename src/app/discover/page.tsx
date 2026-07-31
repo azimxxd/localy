@@ -16,6 +16,7 @@ export default async function DiscoverPage() {
     repo.listBusinesses(),
     repo.listBusinessTypes(),
   ]);
+  const published = (await Promise.all(businesses.map(async (business) => ({ business, site: await repo.getSiteConfig(business.id) })))).filter(({ business, site }) => business.active !== false && site?.published).map(({ business }) => business);
   const typeTitle = (code: string) => types.find((t) => t.code === code)?.title ?? code;
 
   return (
@@ -29,7 +30,7 @@ export default async function DiscoverPage() {
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {businesses.map((b) => (
+        {published.map((b) => (
           <Link key={b.id} href={`/b/${b.slug}`}>
             <Card className="p-4">
               <div className="flex items-center justify-between gap-2">

@@ -14,17 +14,20 @@ import { Badge, Button, Card, TextInput } from '@/components/ui/kit';
 import type { PosPurchaseResult } from '@/lib/repo';
 import { kzt, num } from '@/lib/format';
 import { REDEEM_CONFIRM_THRESHOLD } from '@/lib/types';
+import QrScanner from '@/components/pos/QrScanner';
 
 export default function PosTerminal({
   businessId,
   businessName,
   staffId,
   pointsPerCurrency,
+  promos,
 }: {
   businessId: string;
   businessName: string;
   staffId: string;
   pointsPerCurrency: number;
+  promos: { id: string; title: string; promocode: string }[];
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +38,8 @@ export default function PosTerminal({
   const [amount, setAmount] = useState('');
   const [items, setItems] = useState('');
   const [redeem, setRedeem] = useState('');
+  const [promoId, setPromoId] = useState('');
+  const [claimReward, setClaimReward] = useState(false);
 
   const [result, setResult] = useState<PosPurchaseResult | null>(null);
 
@@ -46,14 +51,17 @@ export default function PosTerminal({
     setAmount('');
     setItems('');
     setRedeem('');
+    setPromoId('');
+    setClaimReward(false);
     setResult(null);
     setError(null);
   }
 
-  function onResolve() {
+  function onResolve(override?: string) {
+    const search = override ?? code;
     setError(null);
     startTransition(async () => {
-      const res = await resolveClient(businessId, code);
+      const res = await resolveClient(businessId, search);
       if ('error' in res) {
         setError(res.error);
         setClient(null);
@@ -71,12 +79,15 @@ export default function PosTerminal({
         businessId,
         staffId,
         qrToken: client.customer.qrToken,
+        customerId: client.customer.id,
         amount: Number(amount),
         items: items
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean),
         redeemPoints: redeem ? Number(redeem) : 0,
+        promoId: promoId || null,
+        claimReward,
       });
       if ('error' in res) {
         setError(res.error);
@@ -99,7 +110,9 @@ export default function PosTerminal({
 
       {result ? (
         <Card className="space-y-3 text-center">
-          <Badge tone="success">Покупка проведена</Badge>
+          <Badge tone={result.requiresConfirmation ? 'warning' : 'success'}>
+            {result.requiresConfirmation ? 'Ожидает подтверждения' : 'Покупка проведена'}
+          </Badge>
           <p className="text-3xl font-bold tnum text-brand">
             {num(result.membership.points)} бонусов
           </p>
@@ -111,7 +124,7 @@ export default function PosTerminal({
           ) : null}
           {result.requiresConfirmation ? (
             <p className="rounded-xl bg-warn-soft px-3 py-2 text-sm text-warn">
-              Крупное списание — попросите клиента подтвердить на своём экране
+            Бонусы и покупка ещё не записаны. Попросите клиента подтвердить списание в своём кабинете.
             </p>
           ) : null}
           <Button className="w-full" onClick={reset}>
@@ -120,14 +133,15 @@ export default function PosTerminal({
         </Card>
       ) : !client ? (
         <Card className="space-y-3">
+          <QrScanner onScan={(value) => { setCode(value); onResolve(value); }} />
           <TextInput
-            label="QR-код клиента или телефон"
-            placeholder="qr_001_… или +7 777 …"
+            label="QR, имя, телефон, ID или код карты"
+            placeholder="Отсканируйте QR или введите данные"
             value={code}
             onChange={(e) => setCode(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && onResolve()}
           />
-          <Button className="w-full" onClick={onResolve} disabled={pending}>
+          <Button className="w-full" onClick={() => onResolve()} disabled={pending}>
             Найти клиента
           </Button>
         </Card>
@@ -154,6 +168,8 @@ export default function PosTerminal({
             onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
             hint={amount ? `Начислим ${num(accrualPreview)} бонусов` : undefined}
           />
+          {promos.length ? <label className="block text-sm"><span className="mb-1 block font-medium">Акция или промокод</span><select className="w-full border border-line px-3 py-2.5" value={promoId} onChange={(e) => setPromoId(e.target.value)}><option value="">Без акции</option>{promos.map((promo) => <option key={promo.id} value={promo.id}>{promo.title} · {promo.promocode}</option>)}</select></label> : null}
+          <label className={`flex items-start gap-2 border p-3 text-sm ${client.rewardAvailable ? 'border-brand bg-brand-soft text-ink' : 'border-line text-ink-soft'}`}><input type="checkbox" checked={claimReward} disabled={!client.rewardAvailable} onChange={(e) => setClaimReward(e.target.checked)} /><span>{client.rewardAvailable ? `Применить награду: ${client.rewardTitle}` : `До награды «${client.rewardTitle}» ещё ${client.visitsToReward} виз.`}</span></label>
           <TextInput
             label="Позиции (через запятую)"
             placeholder="Капучино, Круассан"

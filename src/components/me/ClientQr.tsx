@@ -17,15 +17,18 @@ export default function ClientQr({
   customerId,
   initialToken,
   brandColor,
+  rotatable,
 }: {
   customerId: string;
   initialToken: string;
   brandColor: string;
+  rotatable: boolean;
 }) {
   const [token, setToken] = useState(initialToken);
   const [left, setLeft] = useState(QR_ROTATION_SECONDS);
 
   useEffect(() => {
+    if (!rotatable) return;
     const tick = setInterval(() => {
       setLeft((prev) => {
         if (prev > 1) return prev - 1;
@@ -35,16 +38,14 @@ export default function ClientQr({
       });
     }, 1000);
     return () => clearInterval(tick);
-  }, [customerId]);
+  }, [customerId, rotatable]);
 
   return (
     <div className="flex flex-col items-center gap-3">
       <div className="rounded-card bg-white p-4 shadow-sm">
         <QRCodeSVG value={token} size={220} level="M" fgColor={brandColor} />
       </div>
-      <p className="text-sm text-ink-soft">
-        Обновится через <span className="tnum font-medium text-ink">{left}</span> с
-      </p>
+      <p className="text-sm text-ink-soft">{rotatable ? <>Обновится через <span className="tnum font-medium text-ink">{left}</span> с</> : 'Демо-код только для просмотра'}</p>
     </div>
   );
 }

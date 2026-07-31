@@ -10,6 +10,7 @@
  */
 
 import { cookies } from 'next/headers';
+import { getSession } from '@/lib/auth';
 import { getRepo } from '@/lib/repo';
 import type { Business } from '@/lib/types';
 
@@ -20,6 +21,8 @@ export const DEFAULT_BUSINESS_ID = 'biz_almaty-coffee';
 export const DEMO_CUSTOMER_ID = 'cus_001';
 
 export async function getActiveBusinessId(): Promise<string> {
+  const session = await getSession();
+  if (session?.businessId) return session.businessId;
   const store = await cookies();
   return store.get(BUSINESS_COOKIE)?.value ?? DEFAULT_BUSINESS_ID;
 }

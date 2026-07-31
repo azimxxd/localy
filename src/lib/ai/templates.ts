@@ -19,6 +19,7 @@ const OFFER_NOUN: Record<BusinessTypeCode, string> = {
   coffee: 'напиток',
   barber: 'стрижку',
   beauty: 'услугу',
+  flower: 'букет',
   repair: 'ремонт',
   retail: 'покупку',
 };
@@ -27,8 +28,10 @@ const OFFER_NOUN: Record<BusinessTypeCode, string> = {
 const SEGMENT_TONE: Record<SegmentCode, string> = {
   new: 'для тех, кто был у вас впервые',
   returning: 'для тех, кто вернулся',
+  habit_forming: 'для тех, кто начинает приходить регулярно',
   regular: 'для постоянных гостей',
   loyal: 'для самых верных клиентов',
+  declining: 'для тех, кто стал приходить реже',
   lapsed: 'для тех, кого давно не было',
   at_risk: 'для тех, кто стал заходить реже',
   high_points: 'для тех, у кого накопились бонусы',
@@ -38,6 +41,8 @@ const SEGMENT_TONE: Record<SegmentCode, string> = {
   high_check: 'для гостей с большим чеком',
   no_booking: 'для тех, кто давно не записывался',
   birthday_soon: 'для тех, у кого скоро день рождения',
+  campaign_arrival: 'для тех, кто пришёл по прошлой акции',
+  no_consent: 'для клиентов без согласия на рассылку',
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -150,8 +155,10 @@ export function campaignTextTemplate(input: CampaignTextInput): string {
   const opening: Record<SegmentCode, string> = {
     new: `{name}, спасибо за первый визит в «${input.businessName}»!`,
     returning: '{name}, рады, что вы вернулись!',
+    habit_forming: '{name}, кажется, у нас появляется добрая традиция.',
     regular: '{name}, вы часто у нас бываете — и мы это ценим.',
     loyal: '{name}, вы с нами давно, и это дорого стоит.',
+    declining: '{name}, давно не виделись — будем рады новой встрече.',
     lapsed: `{name}, давно вас не было в «${input.businessName}».`,
     at_risk: '{name}, вы стали заходить реже — всё в порядке?',
     high_points: '{name}, на вашем счету накопились бонусы.',
@@ -161,6 +168,8 @@ export function campaignTextTemplate(input: CampaignTextInput): string {
     high_check: '{name}, спасибо, что выбираете нас.',
     no_booking: '{name}, давно не видели вас в записи.',
     birthday_soon: '{name}, с наступающим днём рождения!',
+    campaign_arrival: '{name}, спасибо, что воспользовались нашим предложением.',
+    no_consent: '{name}, у нас есть новости для вас.',
   };
 
   // В SMS платят за символы — режем до одного предложения
