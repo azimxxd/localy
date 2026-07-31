@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+/**
+ * Localy — дизайн-токены.
+ *
+ * Шрифт системный намеренно: Geist из next/font не содержит кириллицы, а
+ * загрузка веб-шрифта на билде — сетевая зависимость за сутки до сдачи.
+ * Системный стек рендерит русский текст нативно и не даёт сдвига вёрстки.
+ *
+ * Тёмной темы нет: демо снимается в одной, светлой. Лишний режим — лишние
+ * места, где может поехать контраст на видео.
+ */
+
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --color-canvas: #f6f7fb;
+  --color-surface: #ffffff;
+  --color-ink: #0f172a;
+  --color-ink-soft: #64748b;
+  --color-line: #e4e8f0;
+
+  --color-brand: #6d3fe6;
+  --color-brand-ink: #4c25b8;
+  --color-brand-soft: #f1ebff;
+
+  --color-ok: #15803d;
+  --color-ok-soft: #e8f6ec;
+  --color-warn: #b45309;
+  --color-warn-soft: #fdf3e3;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fdecec;
+
+  --radius-card: 1rem;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Числа в лентах и балансах не должны прыгать при обновлении в реальном времени */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes localy-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Новая операция в ленте владельца: подсветка ровно на момент появления */
+.row-new {
+  animation: localy-in 220ms ease-out;
+}
