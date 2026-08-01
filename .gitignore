@@ -43,3 +43,6 @@ next-env.d.ts
 # Local demo database (generated from deterministic seed on first run)
 /data/localy.json
 /data/localy.json.tmp
+
+# skills, установленные локально через npx skills
+/.agents

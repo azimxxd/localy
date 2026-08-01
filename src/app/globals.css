@@ -1,60 +1,68 @@
 @import "tailwindcss";
 
 /*
- * Localy ASCII UI.
- * Интерфейс намеренно обходится без внешних шрифтов, теней, градиентов и
- * скруглений. Визуальный язык строится на символах, сетке и контрасте.
+ * Localy — светлая пастельная ASCII-тема.
+ *
+ * Визуальный язык остаётся символьным: моноширинный шрифт, нулевые
+ * скругления, рамки вместо теней, угловые «+» у панелей. Палитра — тёплая
+ * пастель на бумажном фоне вместо терминального чёрно-зелёного: продукт
+ * продаётся владельцам кофеен и салонов, а не системным администраторам.
  */
 @theme {
   --font-sans: "JetBrains Mono", "IBM Plex Mono", "Cascadia Code", "Liberation Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  --color-canvas: #0b1007;
-  --color-surface: #11180c;
-  --color-ink: #e4e9d3;
-  --color-ink-soft: #919a78;
-  --color-line: #384329;
+  --color-canvas: #f4f2ed;
+  --color-surface: #fbfaf7;
+  --color-ink: #2a2721;
+  --color-ink-soft: #857f72;
+  --color-line: #e0dbd0;
 
-  --color-brand: #c7ff00;
-  --color-brand-ink: #c7ff00;
-  --color-brand-soft: #1c290d;
+  --color-brand: #6b59c4;
+  --color-brand-ink: #4c3f96;
+  --color-brand-soft: #edeafa;
 
-  --color-ok: #c7ff00;
-  --color-ok-soft: #17230b;
-  --color-warn: #ffd166;
-  --color-warn-soft: #2a210c;
-  --color-danger: #ff928b;
-  --color-danger-soft: #2b1210;
+  --color-ok: #4f7f5f;
+  --color-ok-soft: #e7f0e9;
+  --color-warn: #9c6f2c;
+  --color-warn-soft: #f7eee0;
+  --color-danger: #b25a53;
+  --color-danger-soft: #f8ebe9;
 
   --radius-card: 0;
 }
 
-:root { color-scheme: dark; }
+:root { color-scheme: light; }
 
 html {
   -webkit-tap-highlight-color: transparent;
-  background: #0b1007;
+  background: #f4f2ed;
 }
 
+/* Тонкие вертикальные направляющие — сетка макета, а не «сканлайны» */
 body {
-  background-color: #0b1007;
-  background-image: repeating-linear-gradient(0deg, transparent 0, transparent 3px, rgba(199,255,0,.018) 4px);
+  background-color: #f4f2ed;
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0 119px,
+    rgba(42, 39, 33, 0.035) 119px 120px
+  );
 }
 
-::selection { background: #c7ff00; color: #0b1007; }
+::selection { background: #6b59c4; color: #f4f2ed; }
 
 a, button, input, select, textarea, summary { border-radius: 0 !important; }
 button, a, summary { touch-action: manipulation; }
 
 input, select, textarea {
-  color: #e4e9d3;
-  background-color: #0b1007;
+  color: #2a2721;
+  background-color: #fbfaf7;
 }
 
-input::placeholder, textarea::placeholder { color: #697056; }
-select option { background: #11180c; color: #e4e9d3; }
+input::placeholder, textarea::placeholder { color: #a29b8c; }
+select option { background: #fbfaf7; color: #2a2721; }
 
 *:focus-visible {
-  outline: 1px solid #c7ff00;
+  outline: 1px solid #6b59c4;
   outline-offset: 2px;
 }
 
@@ -65,8 +73,8 @@ select option { background: #11180c; color: #e4e9d3; }
 .ascii-panel::after {
   position: absolute;
   z-index: 2;
-  color: #c7ff00;
-  background: #11180c;
+  color: #6b59c4;
+  background: #fbfaf7;
   line-height: 1;
   pointer-events: none;
 }
@@ -74,7 +82,7 @@ select option { background: #11180c; color: #e4e9d3; }
 .ascii-panel::after { content: "+"; right: -1px; bottom: -7px; }
 
 .ascii-kicker {
-  color: #919a78;
+  color: #857f72;
   font-size: .75rem;
   letter-spacing: .12em;
   text-transform: uppercase;
@@ -82,7 +90,7 @@ select option { background: #11180c; color: #e4e9d3; }
 
 .ascii-details > summary { list-style: none; cursor: pointer; }
 .ascii-details > summary::-webkit-details-marker { display: none; }
-.ascii-details > summary::before { content: "[+] "; color: #c7ff00; }
+.ascii-details > summary::before { content: "[+] "; color: #6b59c4; }
 .ascii-details[open] > summary::before { content: "[-] "; }
 
 @keyframes localy-in {
@@ -92,7 +100,7 @@ select option { background: #11180c; color: #e4e9d3; }
 .row-new { animation: localy-in 180ms steps(2, end); }
 
 @keyframes cursor-blink { 50% { opacity: 0; } }
-.ascii-cursor::after { content: "_"; color: #c7ff00; animation: cursor-blink 1s steps(1) infinite; }
+.ascii-cursor::after { content: "_"; color: #6b59c4; animation: cursor-blink 1s steps(1) infinite; }
 
 @media (max-width: 767px) {
   body { background-image: none; }
