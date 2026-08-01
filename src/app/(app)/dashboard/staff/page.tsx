@@ -26,7 +26,7 @@ export default async function StaffPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <header>
-        <p className="ascii-kicker">~/localy/staff</p><h1 className="mt-1 text-2xl font-bold uppercase text-ink">+-- Сотрудники --+</h1>
+        <p className="ascii-kicker">Команда</p><h1 className="mt-1 text-2xl uppercase tracking-[0.1em] text-ink">Сотрудники</h1>
         <p className="mt-1 text-sm text-ink-soft">Доступы, роли и филиалы</p>
       </header>
       <StaffManager businessId={business.id} staff={staff} branches={branches} viewerRole={session.role as 'owner' | 'admin'} />

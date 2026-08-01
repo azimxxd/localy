@@ -22,10 +22,10 @@ export default async function JoinBusinessPage({ params }: { params: Promise<{ s
     <main className="min-h-dvh bg-canvas px-4 py-6">
       <div className="mx-auto max-w-md space-y-4">
         <header className="border px-5 py-8 text-center" style={{ borderColor: business.brandColor }}>
-          <p className="ascii-kicker">+-- JOIN / LOCALY --+</p>
+          <p className="ascii-kicker">Присоединиться к программе</p>
           <pre aria-hidden className="my-4 text-sm leading-tight text-brand">{'  [ QR ]\n  /____\\\n  | +  |\n  \\____/'}</pre>
           <h1 className="mt-2 text-3xl font-bold uppercase text-ink">{business.name}</h1>
-          <p className="mt-1 text-ink-soft">&gt; {business.city}</p>
+          <p className="mt-1 text-ink-soft">{business.city}</p>
         </header>
         <Card>
           <div className="flex items-start justify-between gap-3">

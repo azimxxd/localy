@@ -1,97 +1,145 @@
 @import "tailwindcss";
 
 /*
- * Localy — светлая пастельная ASCII-тема.
+ * Localy — античная тема.
  *
- * Визуальный язык остаётся символьным: моноширинный шрифт, нулевые
- * скругления, рамки вместо теней, угловые «+» у панелей. Палитра — тёплая
- * пастель на бумажном фоне вместо терминального чёрно-зелёного: продукт
- * продаётся владельцам кофеен и салонов, а не системным администраторам.
+ * Визуальный язык: папирус вместо бумаги, эгейская синь и охра вместо
+ * фиолетового, римская капитель в заголовках и гуманистическая антиква в
+ * тексте. Нулевые скругления и рамки вместо теней остались от прежней
+ * ASCII-темы: продукт всё ещё про строгие таблицы и цифры, а не про глянец.
+ * Моноширинный шрифт живёт только там, где нужны колонки цифр (.tnum).
  */
 @theme {
-  --font-sans: "JetBrains Mono", "IBM Plex Mono", "Cascadia Code", "Liberation Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-sans: var(--font-garamond), "EB Garamond", Georgia, "Times New Roman", serif;
+  --font-display: var(--font-forum), "Forum", Georgia, serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  --color-canvas: #f4f2ed;
-  --color-surface: #fbfaf7;
-  --color-ink: #2a2721;
-  --color-ink-soft: #857f72;
-  --color-line: #e0dbd0;
+  --color-canvas: #f2ede1;
+  --color-surface: #faf6ec;
+  --color-ink: #2b2620;
+  --color-ink-soft: #6b6152;
+  --color-line: #ded3bf;
 
-  --color-brand: #6b59c4;
-  --color-brand-ink: #4c3f96;
-  --color-brand-soft: #edeafa;
+  /* Эгейская синь — основной акцент, охра — золото на терракоте */
+  --color-brand: #1f5a73;
+  --color-brand-ink: #164457;
+  --color-brand-soft: #e2ecf0;
+  --color-gold: #8a6220;
+  --color-gold-soft: #f4e9d4;
 
-  --color-ok: #4f7f5f;
-  --color-ok-soft: #e7f0e9;
-  --color-warn: #9c6f2c;
-  --color-warn-soft: #f7eee0;
-  --color-danger: #b25a53;
-  --color-danger-soft: #f8ebe9;
+  --color-ok: #55703f;
+  --color-ok-soft: #e8eddc;
+  --color-warn: #8a6220;
+  --color-warn-soft: #f4e9d4;
+  --color-danger: #9c3f28;
+  --color-danger-soft: #f5e2da;
 
   --radius-card: 0;
+
+  /*
+   * Шкала кегля поднята на ступень относительно дефолтной. У EB Garamond
+   * маленькая высота строчных: 14px антиквы читаются как 12px гротеска, а
+   * интерфейс на 80% состоит из text-sm и text-xs. Правим шкалу один раз
+   * здесь, а не в двух сотнях мест.
+   */
+  --text-xs: 0.875rem;
+  --text-xs--line-height: 1.45;
+  --text-sm: 1rem;
+  --text-sm--line-height: 1.5;
+  --text-base: 1.0625rem;
+  --text-base--line-height: 1.55;
+  --text-lg: 1.1875rem;
+  --text-lg--line-height: 1.55;
+  --text-xl: 1.3125rem;
+  --text-xl--line-height: 1.5;
+  --text-2xl: 1.5625rem;
+  --text-2xl--line-height: 1.3;
+  --text-3xl: 1.9375rem;
+  --text-3xl--line-height: 1.25;
 }
 
 :root { color-scheme: light; }
 
 html {
   -webkit-tap-highlight-color: transparent;
-  background: #f4f2ed;
+  background: #f2ede1;
 }
 
-/* Тонкие вертикальные направляющие — сетка макета, а не «сканлайны» */
+/* Тонкие вертикальные направляющие — колоннада, а не «сканлайны» */
 body {
-  background-color: #f4f2ed;
+  background-color: #f2ede1;
   background-image: repeating-linear-gradient(
     90deg,
     transparent 0 119px,
-    rgba(42, 39, 33, 0.035) 119px 120px
+    rgba(43, 38, 32, 0.045) 119px 120px
   );
 }
 
-::selection { background: #6b59c4; color: #f4f2ed; }
+::selection { background: #1f5a73; color: #f2ede1; }
 
 a, button, input, select, textarea, summary { border-radius: 0 !important; }
 button, a, summary { touch-action: manipulation; }
 
 input, select, textarea {
-  color: #2a2721;
-  background-color: #fbfaf7;
+  color: #2b2620;
+  background-color: #faf6ec;
 }
 
-input::placeholder, textarea::placeholder { color: #a29b8c; }
-select option { background: #fbfaf7; color: #2a2721; }
+input::placeholder, textarea::placeholder { color: #9a917f; }
+select option { background: #faf6ec; color: #2b2620; }
 
 *:focus-visible {
-  outline: 1px solid #6b59c4;
+  outline: 1px solid #1f5a73;
   outline-offset: 2px;
 }
 
-.tnum { font-variant-numeric: tabular-nums; }
+/* Колонки цифр остаются моноширинными: антиква их не выравнивает */
+.tnum { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
+h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: 0.01em; }
+
+/*
+ * Панель античной темы: рамка в рамке вместо угловых «+» из ASCII-версии.
+ * Внутренняя золотая линия — приём наборной полосы, а не терминала.
+ */
 .ascii-panel { position: relative; }
-.ascii-panel::before,
-.ascii-panel::after {
+.ascii-panel::before {
+  content: "";
   position: absolute;
-  z-index: 2;
-  color: #6b59c4;
-  background: #fbfaf7;
-  line-height: 1;
+  inset: 3px;
+  border: 1px solid rgba(138, 98, 32, 0.22);
   pointer-events: none;
 }
-.ascii-panel::before { content: "+"; left: -1px; top: -7px; }
-.ascii-panel::after { content: "+"; right: -1px; bottom: -7px; }
 
 .ascii-kicker {
-  color: #857f72;
-  font-size: .75rem;
-  letter-spacing: .12em;
+  font-family: var(--font-display);
+  color: #6b6152;
+  font-size: .875rem;
+  letter-spacing: .2em;
   text-transform: uppercase;
 }
 
-.ascii-details > summary { list-style: none; cursor: pointer; }
+/*
+ * Меандр — греческий орнамент вместо обычной линейки-разделителя.
+ * Рисуем повторяющимся SVG: одна плитка 24×12, без картинки в бандле.
+ */
+.meander {
+  height: 12px;
+  background-repeat: repeat-x;
+  background-size: 24px 12px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='12' viewBox='0 0 24 12'%3E%3Cpath d='M0 11h23V1H5v8h14V3H9v4h6' fill='none' stroke='%231f5a73' stroke-width='1.4'/%3E%3C/svg%3E");
+  opacity: .5;
+}
+
+.ascii-details > summary {
+  list-style: none;
+  cursor: pointer;
+  font-family: var(--font-display);
+  letter-spacing: .08em;
+}
 .ascii-details > summary::-webkit-details-marker { display: none; }
-.ascii-details > summary::before { content: "[+] "; color: #6b59c4; }
-.ascii-details[open] > summary::before { content: "[-] "; }
+.ascii-details > summary::before { content: "▸ "; color: #8a6220; }
+.ascii-details[open] > summary::before { content: "▾ "; }
 
 @keyframes localy-in {
   from { opacity: 0; transform: translateY(-4px); }
@@ -100,7 +148,7 @@ select option { background: #fbfaf7; color: #2a2721; }
 .row-new { animation: localy-in 180ms steps(2, end); }
 
 @keyframes cursor-blink { 50% { opacity: 0; } }
-.ascii-cursor::after { content: "_"; color: #6b59c4; animation: cursor-blink 1s steps(1) infinite; }
+.ascii-cursor::after { content: "_"; color: #1f5a73; animation: cursor-blink 1s steps(1) infinite; }
 
 @media (max-width: 767px) {
   body { background-image: none; }

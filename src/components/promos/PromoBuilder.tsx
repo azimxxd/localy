@@ -129,7 +129,7 @@ export default function PromoBuilder({
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_20rem]">
       <Card className="space-y-4">
-        <div className="grid grid-cols-4 border-b border-line pb-3 text-center text-[10px] uppercase tracking-wide text-ink-soft"><span className="text-brand">1. Цель</span><span>2. Предложение</span><span>3. Каналы</span><span>4. Проверка</span></div>
+        <div className="grid grid-cols-4 border-b border-line pb-3 text-center text-xs uppercase tracking-wide text-ink-soft"><span className="text-brand">1. Цель</span><span>2. Предложение</span><span>3. Каналы</span><span>4. Проверка</span></div>
         <div><label className="mb-1 block text-sm font-medium text-ink">Цель кампании</label><select value={goal} onChange={(e) => setGoal(e.target.value as PromoGoal)} className="w-full border border-line bg-surface px-3.5 py-2.5"><option value="new_customers">Привлечь новых клиентов</option><option value="return_customers">Вернуть старых клиентов</option><option value="increase_frequency">Увеличить частоту визитов</option><option value="increase_check">Увеличить средний чек</option><option value="sell_item">Продать конкретный товар</option><option value="activate_points">Активировать бонусы</option><option value="referrals">Привести друзей</option><option value="fill_quiet_time">Заполнить непопулярное время</option></select></div>
         <div>
           <label className="mb-1 block text-sm font-medium text-ink">Тип акции</label>

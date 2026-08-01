@@ -43,8 +43,10 @@ export function SectionTitle({
   return (
     <div className="mb-3 flex items-end justify-between gap-3">
       <div>
-        <h2 className="text-base font-semibold uppercase tracking-[0.08em] text-ink">+-- {title} --+</h2>
-        {hint ? <p className="mt-0.5 text-sm text-ink-soft">{hint}</p> : null}
+        {/* Заголовок раздела — римская капитель с золотой чертой, без ASCII-рамок */}
+        <h2 className="font-display text-xl uppercase tracking-[0.14em] text-ink">{title}</h2>
+        <span aria-hidden className="mt-1.5 block h-px w-10 bg-gold" />
+        {hint ? <p className="mt-2 text-sm text-ink-soft">{hint}</p> : null}
       </div>
       {action}
     </div>
@@ -125,14 +127,14 @@ export function TextInput({
   return (
     <label className="block">
       {label ? <span className="mb-1 block text-sm font-medium text-ink">{label}</span> : null}
-      <div className="relative"><span aria-hidden className="absolute left-3 top-2.5 text-brand">&gt;</span><input
+      <input
         className={cn(
-          'w-full border border-line bg-canvas py-2.5 pl-7 pr-3.5 text-ink outline-none',
+          'w-full border border-line bg-canvas px-3.5 py-2.5 text-ink outline-none',
           'placeholder:text-ink-soft focus:border-brand',
           className,
         )}
         {...props}
-      /></div>
+      />
       {hint ? <span className="mt-1 block text-xs text-ink-soft">{hint}</span> : null}
     </label>
   );

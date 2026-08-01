@@ -59,10 +59,10 @@ export default function Sidebar({
   return (
     <aside className="flex w-full shrink-0 flex-col gap-5 border-b border-line bg-surface px-4 py-4 md:sticky md:top-0 md:h-dvh md:w-64 md:border-b-0 md:border-r md:py-6">
       <div className="px-2">
-        <Link href="/" className="text-xl font-bold uppercase tracking-tight text-brand">
+        <Link href="/" className="font-display text-xl uppercase tracking-[0.24em] text-brand">
           LOCALY
         </Link>
-        <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-ink-soft">&gt; business_os / v1.0</p>
+        <p className="ascii-kicker mt-1">Кабинет бизнеса · v1.0</p>
       </div>
 
       {role !== 'platform_admin' ? <select
@@ -100,14 +100,14 @@ export default function Sidebar({
                 active ? 'border-brand bg-brand-soft text-brand' : 'text-ink-soft hover:bg-canvas hover:text-ink',
               )}
             >
-              <span aria-hidden>{active ? '>' : '[ '}</span> {item.label} <span aria-hidden>{active ? '' : ' ]'}</span>
+              {item.label}
             </Link>
           );
         })}
       </nav>
 
       {role !== 'platform_admin' ? <nav aria-label="Настройки" className="hidden flex-col gap-1 border-t border-line pt-4 md:flex">
-        <span className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-soft">{'// Настройки'}</span>
+        <span className="ascii-kicker px-3 pb-1">Настройки</span>
         {SETTINGS_NAV.filter((item) => item.roles.includes(role)).map((item) => {
           const active = pathname.startsWith(item.href);
           return (
@@ -119,7 +119,7 @@ export default function Sidebar({
                 active ? 'border-brand bg-brand-soft text-brand' : 'text-ink-soft hover:bg-canvas',
               )}
             >
-              [ {item.label} ]
+              {item.label}
             </Link>
           );
         })}
@@ -127,16 +127,16 @@ export default function Sidebar({
 
       <div className="mt-auto hidden flex-col gap-1 border-t border-line pt-4 text-sm md:flex">
         {role !== 'platform_admin' ? <Link href="/pos" className="border border-brand px-3 py-2 text-center text-brand hover:bg-brand hover:text-canvas">
-          [ Открыть кассу ]
+          Открыть кассу
         </Link> : null}
         {role !== 'platform_admin' ? <Link href="/me" className="px-3 py-2 text-ink-soft hover:bg-canvas">
-          [ Кабинет клиента ]
+          Кабинет клиента
         </Link> : null}
         <p className="truncate px-3 pt-2 text-xs font-medium text-ink">{userName}</p>
         <p className="px-3 text-xs text-ink-soft">{role === 'platform_admin' ? 'Админ Localy' : role}</p>
         <form action={logoutAction}>
           <button className="w-full px-3 py-2 text-left text-ink-soft hover:bg-canvas">
-            &gt; Выйти
+            Выйти
           </button>
         </form>
       </div>

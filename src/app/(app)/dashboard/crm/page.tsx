@@ -55,8 +55,8 @@ export default async function CrmPage({
     <div className="mx-auto max-w-5xl space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="ascii-kicker">~/localy/customers</p>
-          <h1 className="mt-1 text-2xl font-bold uppercase text-ink">+-- Клиенты --+</h1>
+          <p className="ascii-kicker">Клиенты</p>
+          <h1 className="mt-1 text-2xl uppercase tracking-[0.1em] text-ink">Клиенты</h1>
           <p className="text-sm text-ink-soft">
             {num(profiles.length)} в выборке
             {activeSegment ? ` · сегмент «${activeSegment.title}»` : ''}

@@ -19,7 +19,7 @@ export default async function BranchesPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-5">
       <header>
-        <p className="ascii-kicker">~/localy/branches</p><h1 className="mt-1 text-2xl font-bold uppercase text-ink">+-- Филиалы --+</h1>
+        <p className="ascii-kicker">Филиалы</p><h1 className="mt-1 text-2xl uppercase tracking-[0.1em] text-ink">Филиалы</h1>
         <p className="mt-1 text-sm text-ink-soft">Точки «{business.name}»</p>
       </header>
 

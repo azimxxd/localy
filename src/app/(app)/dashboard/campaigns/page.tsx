@@ -39,8 +39,8 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       <header>
-        <p className="ascii-kicker">~/localy/campaigns</p>
-        <h1 className="mt-1 text-2xl font-bold uppercase text-ink">+-- Рассылки --+</h1>
+        <p className="ascii-kicker">Кампании</p>
+        <h1 className="mt-1 text-2xl uppercase tracking-[0.1em] text-ink">Рассылки</h1>
         <p className="mt-1 text-sm text-ink-soft">Выберите аудиторию, проверьте текст и отправьте.</p>
       </header>
 

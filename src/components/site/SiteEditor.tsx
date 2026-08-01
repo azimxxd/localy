@@ -22,7 +22,7 @@ function Preview({ value }: { value: SiteEditorInput }) {
     <div className="overflow-hidden border border-brand bg-[#080c05] text-ink">
       <div className="border-b border-line px-4 py-2 text-xs text-ink-soft">● ● ● &nbsp; localy.site/preview</div>
       <div className="relative bg-cover bg-center px-7 py-8 text-center" style={value.coverUrl ? { backgroundImage: `linear-gradient(rgba(8,12,5,.86),rgba(8,12,5,.94)),url(${value.coverUrl})` } : undefined}>
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">+-- {theme.label} --+</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">{theme.label}</p>
         {value.logoUrl ? <div aria-label="Логотип" className="mx-auto my-5 h-20 w-20 border border-brand bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url(${value.logoUrl})` }} /> : <pre aria-hidden className="my-5 whitespace-pre font-mono text-sm leading-tight text-brand">{theme.art.replaceAll('\\n', '\n')}</pre>}
         <h2 className="text-3xl font-bold uppercase text-brand">{value.name || 'Название бизнеса'}</h2>
         <p className="mx-auto mt-2 max-w-md text-sm text-ink-soft">{value.description || 'Кратко расскажите, почему к вам стоит прийти.'}</p>

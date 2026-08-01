@@ -56,7 +56,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <div><p className="ascii-kicker">~/localy/analytics</p><h1 className="mt-1 text-2xl font-bold uppercase text-ink">+-- Аналитика --+</h1><p className="mt-1 text-sm text-ink-soft">Главное за выбранный период</p></div>
+        <div><p className="ascii-kicker">Аналитика</p><h1 className="mt-1 text-2xl uppercase tracking-[0.1em] text-ink">Аналитика</h1><p className="mt-1 text-sm text-ink-soft">Главное за выбранный период</p></div>
         <div className="flex gap-1">{[7, 30, 90, 180].map((value) => <Link key={value} href={`/dashboard/analytics?days=${value}`} className={`border px-3 py-2 text-sm ${days === value ? 'border-brand bg-brand text-canvas' : 'border-line bg-surface text-ink-soft'}`}>[ {value} дн. ]</Link>)}</div>
       </header>
 
@@ -83,14 +83,14 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <p className="ascii-kicker">{'// Ритм недели'}</p>
+          <p className="ascii-kicker">Ритм недели</p>
           <h2 className="mb-1 mt-1 font-semibold text-ink">Когда приходит больше людей</h2>
           <p className="mb-3 text-xs text-ink-soft">Один столбец — один день. Выше значит больше визитов.</p>
           <WeekdayChart data={weekday} />
         </Card>
 
         <Card>
-          <p className="ascii-kicker">{'// Топ позиций'}</p>
+          <p className="ascii-kicker">Топ позиций</p>
           <h2 className="mb-3 mt-1 font-semibold text-ink">Что покупают чаще</h2>
           {stats.topItems.length === 0 ? (
             <p className="text-sm text-ink-soft">Нет данных.</p>

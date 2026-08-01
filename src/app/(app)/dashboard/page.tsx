@@ -49,8 +49,8 @@ export default async function DashboardPage() {
     <div className="mx-auto max-w-6xl space-y-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <p className="ascii-kicker">~/localy/overview</p>
-          <h1 className="mt-1 text-2xl font-bold uppercase text-ink">+-- {business.name} --+</h1>
+          <p className="ascii-kicker">Обзор</p>
+          <h1 className="mt-1 text-2xl uppercase tracking-[0.1em] text-ink">{business.name}</h1>
           <p className="mt-1 text-sm text-ink-soft">
             {business.city} · данные за 30 дней
           </p>
@@ -71,7 +71,7 @@ export default async function DashboardPage() {
 
       <Card className="space-y-4">
         <div>
-          <p className="ascii-kicker">{'// Быстрый старт'}</p>
+          <p className="ascii-kicker">Быстрый старт</p>
           <h2 className="mt-1 font-semibold text-ink">Что хотите сделать?</h2>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -102,7 +102,7 @@ export default async function DashboardPage() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,.7fr)]">
         <Card>
-          <p className="ascii-kicker">{'// Следующий шаг'}</p>
+          <p className="ascii-kicker">Следующий шаг</p>
           <h2 className="mb-3 mt-1 text-lg font-semibold text-ink">Что можно улучшить</h2>
           {recommendations.length === 0 ? (
             <EmptyState title="Всё под контролем" hint="Тревожных сигналов нет" />
@@ -116,7 +116,7 @@ export default async function DashboardPage() {
                     href={REC_HREF[rec.actionKind]}
                     className="mt-2 inline-block text-sm font-medium text-brand hover:underline"
                   >
-                    [ Сделать ] →
+                    Сделать →
                   </Link>
                 </li>
               ))}

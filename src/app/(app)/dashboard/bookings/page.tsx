@@ -33,7 +33,7 @@ export default async function BookingsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-5">
       <header>
-        <p className="ascii-kicker">~/localy/bookings</p><h1 className="mt-1 text-2xl font-bold uppercase text-ink">+-- Записи и заявки --+</h1>
+        <p className="ascii-kicker">Записи</p><h1 className="mt-1 text-2xl uppercase tracking-[0.1em] text-ink">Записи и заявки</h1>
         <p className="mt-1 text-sm text-ink-soft">Подтвердите, выполните или отмените</p>
       </header>
 
@@ -49,7 +49,7 @@ export default async function BookingsPage() {
                 <p className="text-xs text-ink-soft">
                   {customer?.name ?? 'Клиент'} · {dateShort(booking.at)}{booking.kind === 'lead' ? '' : `, ${timeShort(booking.at)}`}
                 </p>
-                {booking.note ? <p className="mt-1 text-xs text-ink-soft">&gt; {booking.note}</p> : null}
+                {booking.note ? <p className="mt-1 text-xs text-ink-soft">{booking.note}</p> : null}
               </div>
               <Badge tone={STATUS[booking.status].tone}>{STATUS[booking.status].label}</Badge>
               </div>
