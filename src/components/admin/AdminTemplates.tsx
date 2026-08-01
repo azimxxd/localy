@@ -8,7 +8,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
-import { createTemplateAction, deleteTemplateAction } from '@/app/(app)/admin/actions';
+import { createTemplateAction, deleteTemplateAction, updateTemplateAction } from '@/app/(app)/admin/actions';
 import { Badge, Button, Card, TextInput } from '@/components/ui/kit';
 import { CATEGORY_LABELS, TEMPLATE_KIND_LABELS } from '@/lib/tool-labels';
 import type { Template, ToolCategory } from '@/lib/types';
@@ -95,26 +95,13 @@ export default function AdminTemplates({ templates }: { templates: Template[] })
       </Card>
 
       <div className="space-y-2">
-        {templates.map((t) => (
-          <Card key={t.id} className="flex items-start justify-between gap-3 p-4">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="font-medium text-ink">{t.title}</p>
-                <Badge tone="muted">{TEMPLATE_KIND_LABELS[t.kind]}</Badge>
-                <Badge tone="muted">{CATEGORY_LABELS[t.category]}</Badge>
-              </div>
-              <p className="mt-1 truncate text-xs text-ink-soft">{t.body}</p>
-            </div>
-            <button
-              onClick={() => remove(t.id)}
-              disabled={pending}
-              className="shrink-0 text-xs text-danger hover:underline"
-            >
-              Удалить
-            </button>
-          </Card>
-        ))}
+        {templates.map((t) => <TemplateRow key={t.id} template={t} pending={pending} remove={remove} save={(title, body) => start(async () => { await updateTemplateAction(t.id, { title, body }); router.refresh(); })} />)}
       </div>
     </div>
   );
+}
+
+function TemplateRow({ template, pending, remove, save }: { template: Template; pending: boolean; remove: (id: string) => void; save: (title: string, body: string) => void }) {
+  const [editing, setEditing] = useState(false); const [title, setTitle] = useState(template.title); const [body, setBody] = useState(template.body);
+  return <Card className="p-4">{editing ? <div className="space-y-2"><TextInput value={title} onChange={(e) => setTitle(e.target.value)} /><textarea rows={3} className="w-full border border-line px-3 py-2 text-sm" value={body} onChange={(e) => setBody(e.target.value)} /><div className="flex gap-2"><Button disabled={pending} onClick={() => { save(title, body); setEditing(false); }}>Сохранить</Button><Button variant="ghost" onClick={() => setEditing(false)}>Отмена</Button></div></div> : <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-medium text-ink">{template.title}</p><Badge tone="muted">{TEMPLATE_KIND_LABELS[template.kind]}</Badge><Badge tone="muted">{CATEGORY_LABELS[template.category]}</Badge></div><p className="mt-1 text-xs text-ink-soft">{template.body}</p></div><div className="flex gap-2"><button onClick={() => setEditing(true)} className="text-xs text-brand">Изменить</button><button onClick={() => remove(template.id)} disabled={pending} className="text-xs text-danger">Удалить</button></div></div>}</Card>;
 }

@@ -19,6 +19,7 @@ export type BusinessTypeCode =
   | 'coffee' // кофейня
   | 'barber' // барбершоп
   | 'beauty' // салон красоты
+  | 'flower' // цветочный магазин
   | 'repair' // ремонт техники
   | 'retail'; // небольшой магазин
 
@@ -27,6 +28,16 @@ export interface BusinessType {
   code: BusinessTypeCode;
   title: string;
   icon: string;
+  /** Запасной цикл визита, если у клиента ещё недостаточно истории. */
+  defaultRepeatVisitDays: number;
+  /** Границы статусов как множители обычного цикла визита. */
+  activityThresholds: ActivityThresholds;
+}
+
+export interface ActivityThresholds {
+  declining: number;
+  atRisk: number;
+  lapsed: number;
 }
 
 /** Категория инструмента в каталоге. Ровно эти пять — требование положения. */
@@ -77,12 +88,50 @@ export interface Template {
 
 export type PlanTier = 'free' | 'basic' | 'pro';
 
+export interface PlanLimits {
+  customers: number;
+  campaignsPerMonth: number;
+  staff: number;
+  branches: number;
+  activePromos: number;
+}
+
+export interface Plan {
+  tier: PlanTier;
+  title: string;
+  priceKzt: number;
+  description: string;
+  features: string[];
+  limits: PlanLimits;
+}
+
+export interface Subscription {
+  businessId: string;
+  plan: PlanTier;
+  status: 'trial' | 'active' | 'past_due' | 'cancelled';
+  startedAt: string;
+  nextBillingAt: string | null;
+}
+
+export interface SubscriptionPayment {
+  id: string;
+  businessId: string;
+  plan: PlanTier;
+  amountKzt: number;
+  status: 'paid' | 'demo';
+  at: string;
+}
+
 /** Цель, выбираемая при онбординге. Влияет на План роста на 30 дней. */
 export type BusinessGoal =
+  | 'create_site'
   | 'new_customers' // привлечь новых
   | 'return_customers' // вернуть ушедших
   | 'increase_check' // поднять средний чек
   | 'increase_frequency' // повысить частоту визитов
+  | 'launch_loyalty'
+  | 'collect_clients'
+  | 'online_booking'
   | 'automate'; // автоматизировать рутину
 
 export interface Business {
@@ -91,10 +140,18 @@ export interface Business {
   name: string;
   typeCode: BusinessTypeCode;
   city: string;
+  address?: string;
+  employeeCount?: number;
+  branchCount?: number;
+  offerings?: string[];
+  repeatVisitDays?: number;
+  currentTools?: string[];
+  onboardingCompleted?: boolean;
   /** Средний чек в тенге — база для симулятора прогноза. */
   avgCheck: number;
   goals: BusinessGoal[];
   plan: PlanTier;
+  active?: boolean;
   brandColor: string;
   logoUrl: string | null;
   createdAt: string;
@@ -108,6 +165,12 @@ export interface Branch {
   phone: string;
 }
 
+export interface BusinessQrStats {
+  businessId: string;
+  scans: number;
+  registrations: number;
+}
+
 /** Настройки бонусной программы конкретного бизнеса. */
 export interface LoyaltyConfig {
   businessId: string;
@@ -118,6 +181,13 @@ export interface LoyaltyConfig {
   rewardTitle: string;
   /** Через сколько дней сгорают бонусы. null = не сгорают. */
   expiryDays: number | null;
+  /** Максимальная доля чека, которую можно оплатить бонусами. */
+  maxRedemptionPercent?: number;
+  startBonus?: number;
+  minPurchaseAmount?: number;
+  excludedItems?: string[];
+  /** Награда за количество визитов, независимо от бонусного баланса. */
+  rewardEveryVisits?: number;
 }
 
 /** Конфигурация сайта бизнеса — то, что рендерит /b/[slug]. */
@@ -126,10 +196,32 @@ export interface SiteConfig {
   templateId: string;
   sections: SiteSection[];
   published: boolean;
+  description?: string;
+  coverUrl?: string | null;
+  logoUrl?: string | null;
+  galleryUrls?: string[];
+  phone?: string;
+  workHours?: string;
+  telegram?: string;
+  whatsapp?: string;
+  instagram?: string;
+  primaryColor?: string;
+  fontStyle?: 'clean' | 'editorial' | 'friendly';
+  catalog?: CatalogItem[];
+}
+
+export interface CatalogItem {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  price: number;
+  imageUrl?: string | null;
+  active: boolean;
 }
 
 export interface SiteSection {
-  kind: 'hero' | 'about' | 'services' | 'promos' | 'loyalty' | 'contacts' | 'booking';
+  kind: 'hero' | 'about' | 'services' | 'promos' | 'loyalty' | 'contacts' | 'booking' | 'lead';
   enabled: boolean;
   title: string;
   body: string;
@@ -142,14 +234,34 @@ export interface SiteSection {
 /** Кассир видит только /pos. Разграничение — в src/lib/permissions.ts */
 export type StaffRole = 'owner' | 'admin' | 'marketer' | 'cashier' | 'manager';
 
+/** Роль пользователя приложения. Администратор Localy не привязан к бизнесу. */
+export type UserRole = StaffRole | 'platform_admin';
+
+/**
+ * Учётная запись для входа. Пароль хранится только в виде хеша и никогда не
+ * возвращается клиентским компонентам.
+ */
+export interface User {
+  id: string;
+  login: string;
+  name: string;
+  passwordHash: string;
+  role: UserRole;
+  businessId: string | null;
+  staffId: string | null;
+  active: boolean;
+  createdAt: string;
+}
+
 export interface Staff {
   id: string;
   businessId: string;
   branchId: string | null;
   name: string;
   role: StaffRole;
-  /** Короткий код входа в демо-режиме. Не пароль, не хешируется. */
+  /** PIN кассира. В интерфейс владельца возвращается только маска. */
   pin: string;
+  active?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -186,10 +298,14 @@ export interface Membership {
   /** Каналы, на которые клиент дал согласие. Пустой = не писать вообще. */
   consentChannels: NotificationChannel[];
   favoriteItems: string[];
+  /** Сколько наград за серии визитов уже выдано. */
+  claimedVisitRewards?: number;
+  source?: string;
+  notes?: string;
 }
 
 /** Уровень лояльности — по количеству визитов, сроку жизни и сумме. */
-export type LoyaltyLevel = 'new' | 'returning' | 'regular' | 'loyal';
+export type LoyaltyLevel = 'new' | 'returning' | 'habit_forming' | 'regular' | 'loyal';
 
 /**
  * Текущая активность — считается от ЛИЧНОЙ частоты визитов клиента,
@@ -234,7 +350,22 @@ export interface Transaction {
   amount: number;
   /** Изменение бонусного баланса: + начисление, − списание. */
   pointsDelta: number;
+  accruedPoints?: number;
+  redeemedPoints?: number;
+  status?: 'pending_confirmation' | 'completed' | 'cancelled';
+  rewardTitle?: string | null;
+  promoId?: string | null;
   kind: TransactionKind;
+  items: string[];
+  createdAt: string;
+}
+
+/** Импортированный из кассы чек без клиентского QR. */
+export interface AnonymousSale {
+  id: string;
+  businessId: string;
+  branchId: string | null;
+  amount: number;
   items: string[];
   createdAt: string;
 }
@@ -243,12 +374,14 @@ export interface Transaction {
 // Сегменты
 // ─────────────────────────────────────────────────────────────
 
-/** Все 13 сегментов. Система собирает их сама — владелец не листает список. */
+/** Полезные автосегменты CRM. */
 export type SegmentCode =
   | 'new'
   | 'returning'
+  | 'habit_forming'
   | 'regular'
   | 'loyal'
+  | 'declining'
   | 'lapsed'
   | 'at_risk'
   | 'high_points'
@@ -257,7 +390,9 @@ export type SegmentCode =
   | 'item_buyers'
   | 'high_check'
   | 'no_booking'
-  | 'birthday_soon';
+  | 'birthday_soon'
+  | 'campaign_arrival'
+  | 'no_consent';
 
 export interface Segment {
   code: SegmentCode;
@@ -285,7 +420,19 @@ export type PromoKind =
   | 'birthday' // подарок на день рождения
   | 'referral'; // реферальная программа
 
-export type PromoStatus = 'draft' | 'scheduled' | 'active' | 'finished';
+export type PromoStatus = 'draft' | 'scheduled' | 'active' | 'paused' | 'finished';
+
+export type PromoGoal =
+  | 'new_customers'
+  | 'return_customers'
+  | 'increase_frequency'
+  | 'increase_check'
+  | 'sell_item'
+  | 'activate_points'
+  | 'referrals'
+  | 'fill_quiet_time';
+
+export type PromoPlacement = 'site' | 'client_app' | 'cashier' | 'qr_landing';
 
 /**
  * Прогноз ДО запуска акции — ключевое отличие Localy.
@@ -310,6 +457,11 @@ export interface Promo {
   /** Размер: проценты для discount, штуки бонусов для points и т.д. */
   value: number;
   segment: SegmentCode;
+  goal?: PromoGoal;
+  branchId?: string | null;
+  channel?: NotificationChannel;
+  placements?: PromoPlacement[];
+  body?: string;
   audienceSize: number;
   startsAt: string;
   endsAt: string;
@@ -319,8 +471,8 @@ export interface Promo {
   createdAt: string;
 }
 
-/** Стадия воронки. Отчёт: 120 получили → 76 открыли → 28 пришли → 21 использовал. */
-export type PromoStage = 'sent' | 'opened' | 'visited' | 'redeemed';
+/** Стадия воронки. */
+export type PromoStage = 'sent' | 'opened' | 'clicked' | 'visited' | 'redeemed';
 
 export interface PromoEvent {
   promoId: string;
@@ -334,6 +486,7 @@ export interface PromoFunnel {
   promoId: string;
   sent: number;
   opened: number;
+  clicked: number;
   visited: number;
   redeemed: number;
   revenue: number;
@@ -352,6 +505,12 @@ export interface Campaign {
   audienceSize: number;
   body: string;
   sentAt: string | null;
+  opened?: number;
+  clicked?: number;
+  visited?: number;
+  redeemed?: number;
+  /** Фактические получатели после consent- и anti-spam-фильтра. */
+  recipientIds?: string[];
   /** В MVP отправки нет — интерфейс полный, симуляция. */
   simulated: boolean;
 }
@@ -361,15 +520,20 @@ export interface Campaign {
 // ─────────────────────────────────────────────────────────────
 
 export interface BusinessStats {
+  totalCustomers: number;
   newCustomers: number;
   returningCustomers: number;
+  repeatVisits: number;
   visits: number;
   avgCheck: number;
   activeCustomers: number;
   atRiskShare: number;
+  atRiskCustomers: number;
   pointsAccrued: number;
   pointsRedeemed: number;
   revenue: number;
+  pointsUnspent: number;
+  activePromoConversion: number;
   /** Доля покупок, привязанных к клиентским картам. */
   identifiedShare: number;
   topItems: { title: string; count: number }[];
@@ -396,6 +560,14 @@ export interface Recommendation {
   segment?: SegmentCode;
   suggestedPromoKind?: PromoKind;
   affectedCount: number;
+}
+
+export interface RecommendationRuleSetting {
+  id: string;
+  label: string;
+  actionText: string;
+  priority: number;
+  active: boolean;
 }
 
 /** План роста на 30 дней — результат онбординга. */
@@ -437,6 +609,8 @@ export interface Booking {
   customerId: string;
   service: string;
   at: string;
+  kind?: 'booking' | 'lead';
+  note?: string;
   status: BookingStatus;
 }
 
@@ -477,7 +651,7 @@ export const QR_ROTATION_SECONDS = 45;
  *   14 дней  (14 ≤ 14, но > 9.1)                → declining, на границе с at_risk
  *   25 дней  (> 7×3.5 = 24.5)                   → lapsed
  */
-export const ACTIVITY_THRESHOLDS = {
+export const ACTIVITY_THRESHOLDS: ActivityThresholds = {
   declining: 1.3,
   atRisk: 2.0,
   lapsed: 3.5,

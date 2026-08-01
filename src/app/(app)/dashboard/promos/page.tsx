@@ -12,15 +12,18 @@ import { dateShort, num } from '@/lib/format';
 import { PROMO_KIND_LABELS, PROMO_STATUS_LABELS } from '@/lib/promo-labels';
 import { getRepo } from '@/lib/repo';
 import type { PromoStatus } from '@/lib/types';
+import { requireSession } from '@/lib/auth';
 
 const STATUS_TONE: Record<PromoStatus, 'brand' | 'success' | 'warning' | 'muted'> = {
   draft: 'muted',
   scheduled: 'warning',
   active: 'success',
+  paused: 'warning',
   finished: 'brand',
 };
 
 export default async function PromosPage() {
+  await requireSession(['owner', 'admin', 'marketer', 'manager']);
   const repo = await getRepo();
   const business = await getActiveBusiness();
   const promos = await repo.listPromos(business.id);

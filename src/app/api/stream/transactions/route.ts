@@ -12,6 +12,7 @@
 
 import { getRepo } from '@/lib/repo';
 import { toFeedRow } from '@/lib/feed';
+import { getSession } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -20,6 +21,11 @@ export async function GET(request: Request) {
   const businessId = new URL(request.url).searchParams.get('businessId');
   if (!businessId) {
     return new Response('Параметр businessId обязателен', { status: 400 });
+  }
+  const session = await getSession();
+  if (!session) return new Response('Требуется вход', { status: 401 });
+  if (session.businessId !== businessId || session.role === 'cashier') {
+    return new Response('Нет доступа', { status: 403 });
   }
 
   const repo = await getRepo();

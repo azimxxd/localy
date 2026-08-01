@@ -14,6 +14,7 @@
 import {
   ACTIVITY_THRESHOLDS,
   type ActivityState,
+  type ActivityThresholds,
   type Customer,
   type CustomerProfile,
   type LoyaltyConfig,
@@ -60,7 +61,9 @@ export function medianIntervalDays(visitDates: string[]): number {
 
 /** Даты визитов из транзакций — только покупки. */
 export function visitDatesFrom(transactions: Transaction[]): string[] {
-  return transactions.filter((t) => t.kind === 'purchase').map((t) => t.createdAt);
+  return transactions
+    .filter((t) => t.kind === 'purchase' && t.status !== 'pending_confirmation' && t.status !== 'cancelled')
+    .map((t) => t.createdAt);
 }
 
 /**
@@ -79,12 +82,13 @@ export function activityState(
   daysSinceLastVisit: number,
   medianInterval: number,
   fallbackIntervalDays = 30,
+  thresholds: ActivityThresholds = ACTIVITY_THRESHOLDS,
 ): ActivityState {
   const base = medianInterval > 0 ? medianInterval : fallbackIntervalDays;
 
-  if (daysSinceLastVisit <= base * ACTIVITY_THRESHOLDS.declining) return 'active';
-  if (daysSinceLastVisit <= base * ACTIVITY_THRESHOLDS.atRisk) return 'declining';
-  if (daysSinceLastVisit <= base * ACTIVITY_THRESHOLDS.lapsed) return 'at_risk';
+  if (daysSinceLastVisit <= base * thresholds.declining) return 'active';
+  if (daysSinceLastVisit <= base * thresholds.atRisk) return 'declining';
+  if (daysSinceLastVisit <= base * thresholds.lapsed) return 'at_risk';
   return 'lapsed';
 }
 
@@ -100,15 +104,25 @@ export function loyaltyLevel(
   lifetimeDays: number,
   totalSpent: number,
   avgCheck: number,
+  visitDates: string[] = [],
 ): LoyaltyLevel {
-  if (visits <= 1) return 'new';
-
+  const uniqueDays = new Set(visitDates.map((date) => date.slice(0, 10))).size || visits;
+  const uniqueWeeks = new Set(
+    visitDates.map((date) => {
+      const value = new Date(date);
+      const yearStart = Date.UTC(value.getUTCFullYear(), 0, 1);
+      const week = Math.ceil((value.getTime() - yearStart + 86_400_000) / (7 * 86_400_000));
+      return `${value.getUTCFullYear()}-${week}`;
+    }),
+  ).size;
   const spendScore = avgCheck > 0 ? totalSpent / avgCheck : 0;
-  const score = visits + spendScore * 0.5 + Math.min(lifetimeDays / 30, 12);
 
-  if (score >= 28) return 'loyal';
-  if (score >= 10) return 'regular';
-  return 'returning';
+  if (uniqueDays <= 1) return 'new';
+  if (uniqueDays <= 3 || uniqueWeeks < 3) return 'returning';
+  if (lifetimeDays < 45 || uniqueWeeks < 5) return 'habit_forming';
+  if (lifetimeDays >= 120 && uniqueWeeks >= 10 && visits >= 12 && spendScore >= 10) return 'loyal';
+  if (lifetimeDays >= 60 && uniqueWeeks >= 6 && visits >= 7) return 'regular';
+  return 'habit_forming';
 }
 
 /**
@@ -157,6 +171,8 @@ export function buildCustomerProfile(params: {
   transactions: Transaction[];
   loyalty: LoyaltyConfig;
   now?: string;
+  fallbackIntervalDays?: number;
+  activityThresholds?: ActivityThresholds;
 }): CustomerProfile {
   const { customer, membership, transactions, loyalty } = params;
   const now = params.now ?? new Date().toISOString();
@@ -166,7 +182,9 @@ export function buildCustomerProfile(params: {
   const daysSince = daysBetween(membership.lastSeen, now);
   const lifetimeDays = daysBetween(membership.firstSeen, now);
 
-  const purchases = transactions.filter((t) => t.kind === 'purchase');
+  const purchases = transactions.filter(
+    (t) => t.kind === 'purchase' && t.status !== 'pending_confirmation' && t.status !== 'cancelled',
+  );
   const avgCheck =
     purchases.length > 0
       ? Math.round(purchases.reduce((sum, t) => sum + t.amount, 0) / purchases.length)
@@ -175,8 +193,8 @@ export function buildCustomerProfile(params: {
   return {
     customer,
     membership,
-    level: loyaltyLevel(membership.visits, lifetimeDays, membership.totalSpent, avgCheck),
-    activity: activityState(daysSince, medianInterval),
+    level: loyaltyLevel(membership.visits, lifetimeDays, membership.totalSpent, avgCheck, visits),
+    activity: activityState(daysSince, medianInterval, params.fallbackIntervalDays, params.activityThresholds),
     medianIntervalDays: medianInterval,
     daysSinceLastVisit: daysSince,
     avgCheck,
@@ -199,6 +217,7 @@ export const ACTIVITY_LABELS: Record<ActivityState, string> = {
 export const LEVEL_LABELS: Record<LoyaltyLevel, string> = {
   new: 'Новый',
   returning: 'Вернувшийся',
+  habit_forming: 'Формирует привычку',
   regular: 'Постоянный клиент',
   loyal: 'Лояльный клиент',
 };

@@ -1,61 +1,103 @@
 @import "tailwindcss";
 
-/**
- * Localy — дизайн-токены.
- *
- * Шрифт системный намеренно: Geist из next/font не содержит кириллицы, а
- * загрузка веб-шрифта на билде — сетевая зависимость за сутки до сдачи.
- * Системный стек рендерит русский текст нативно и не даёт сдвига вёрстки.
- *
- * Тёмной темы нет: демо снимается в одной, светлой. Лишний режим — лишние
- * места, где может поехать контраст на видео.
+/*
+ * Localy ASCII UI.
+ * Интерфейс намеренно обходится без внешних шрифтов, теней, градиентов и
+ * скруглений. Визуальный язык строится на символах, сетке и контрасте.
  */
-
 @theme {
-  --font-sans:
-    ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "JetBrains Mono", "IBM Plex Mono", "Cascadia Code", "Liberation Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  --color-canvas: #f6f7fb;
-  --color-surface: #ffffff;
-  --color-ink: #0f172a;
-  --color-ink-soft: #64748b;
-  --color-line: #e4e8f0;
+  --color-canvas: #0b1007;
+  --color-surface: #11180c;
+  --color-ink: #e4e9d3;
+  --color-ink-soft: #919a78;
+  --color-line: #384329;
 
-  --color-brand: #6d3fe6;
-  --color-brand-ink: #4c25b8;
-  --color-brand-soft: #f1ebff;
+  --color-brand: #c7ff00;
+  --color-brand-ink: #c7ff00;
+  --color-brand-soft: #1c290d;
 
-  --color-ok: #15803d;
-  --color-ok-soft: #e8f6ec;
-  --color-warn: #b45309;
-  --color-warn-soft: #fdf3e3;
-  --color-danger: #b91c1c;
-  --color-danger-soft: #fdecec;
+  --color-ok: #c7ff00;
+  --color-ok-soft: #17230b;
+  --color-warn: #ffd166;
+  --color-warn-soft: #2a210c;
+  --color-danger: #ff928b;
+  --color-danger-soft: #2b1210;
 
-  --radius-card: 1rem;
+  --radius-card: 0;
 }
+
+:root { color-scheme: dark; }
 
 html {
   -webkit-tap-highlight-color: transparent;
+  background: #0b1007;
 }
 
-/* Числа в лентах и балансах не должны прыгать при обновлении в реальном времени */
-.tnum {
-  font-variant-numeric: tabular-nums;
+body {
+  background-color: #0b1007;
+  background-image: repeating-linear-gradient(0deg, transparent 0, transparent 3px, rgba(199,255,0,.018) 4px);
 }
+
+::selection { background: #c7ff00; color: #0b1007; }
+
+a, button, input, select, textarea, summary { border-radius: 0 !important; }
+button, a, summary { touch-action: manipulation; }
+
+input, select, textarea {
+  color: #e4e9d3;
+  background-color: #0b1007;
+}
+
+input::placeholder, textarea::placeholder { color: #697056; }
+select option { background: #11180c; color: #e4e9d3; }
+
+*:focus-visible {
+  outline: 1px solid #c7ff00;
+  outline-offset: 2px;
+}
+
+.tnum { font-variant-numeric: tabular-nums; }
+
+.ascii-panel { position: relative; }
+.ascii-panel::before,
+.ascii-panel::after {
+  position: absolute;
+  z-index: 2;
+  color: #c7ff00;
+  background: #11180c;
+  line-height: 1;
+  pointer-events: none;
+}
+.ascii-panel::before { content: "+"; left: -1px; top: -7px; }
+.ascii-panel::after { content: "+"; right: -1px; bottom: -7px; }
+
+.ascii-kicker {
+  color: #919a78;
+  font-size: .75rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.ascii-details > summary { list-style: none; cursor: pointer; }
+.ascii-details > summary::-webkit-details-marker { display: none; }
+.ascii-details > summary::before { content: "[+] "; color: #c7ff00; }
+.ascii-details[open] > summary::before { content: "[-] "; }
 
 @keyframes localy-in {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.row-new { animation: localy-in 180ms steps(2, end); }
+
+@keyframes cursor-blink { 50% { opacity: 0; } }
+.ascii-cursor::after { content: "_"; color: #c7ff00; animation: cursor-blink 1s steps(1) infinite; }
+
+@media (max-width: 767px) {
+  body { background-image: none; }
 }
 
-/* Новая операция в ленте владельца: подсветка ровно на момент появления */
-.row-new {
-  animation: localy-in 220ms ease-out;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }

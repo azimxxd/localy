@@ -36,5 +36,6 @@ export const PROMO_STATUS_LABELS: Record<PromoStatus, string> = {
   draft: 'Черновик',
   scheduled: 'Запланирована',
   active: 'Идёт',
+  paused: 'Приостановлена',
   finished: 'Завершена',
 };

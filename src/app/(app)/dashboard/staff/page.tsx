@@ -6,53 +6,37 @@
  * контроля подозрительных списаний.
  */
 
-import { Badge, Card, EmptyState } from '@/components/ui/kit';
+import { Card, EmptyState } from '@/components/ui/kit';
+import StaffManager from '@/components/staff/StaffManager';
 import { getActiveBusiness } from '@/lib/demo';
 import { dateShort, timeShort } from '@/lib/format';
 import { getRepo } from '@/lib/repo';
-import type { StaffRole } from '@/lib/types';
-
-const ROLE_LABELS: Record<StaffRole, string> = {
-  owner: 'Владелец',
-  admin: 'Администратор',
-  marketer: 'Маркетолог',
-  cashier: 'Кассир',
-  manager: 'Управляющий',
-};
+import { requireSession } from '@/lib/auth';
 
 export default async function StaffPage() {
+  const session = await requireSession(['owner', 'admin']);
   const repo = await getRepo();
   const business = await getActiveBusiness();
-  const [staff, log] = await Promise.all([
+  const [staff, log, branches] = await Promise.all([
     repo.listStaff(business.id),
     repo.listActivityLog(business.id, 20),
+    repo.listBranches(business.id),
   ]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <header>
-        <h1 className="text-2xl font-bold text-ink">Сотрудники</h1>
-        <p className="text-sm text-ink-soft">Роли и журнал действий</p>
+        <p className="ascii-kicker">~/localy/staff</p><h1 className="mt-1 text-2xl font-bold uppercase text-ink">+-- Сотрудники --+</h1>
+        <p className="mt-1 text-sm text-ink-soft">Доступы, роли и филиалы</p>
       </header>
+      <StaffManager businessId={business.id} staff={staff} branches={branches} viewerRole={session.role as 'owner' | 'admin'} />
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {staff.map((s) => (
-          <Card key={s.id} className="flex items-center justify-between gap-2 p-4">
-            <div>
-              <p className="font-medium text-ink">{s.name}</p>
-              <p className="text-xs text-ink-soft">PIN {s.pin}</p>
-            </div>
-            <Badge tone={s.role === 'owner' ? 'brand' : 'muted'}>{ROLE_LABELS[s.role]}</Badge>
-          </Card>
-        ))}
-      </div>
-
-      <section>
-        <h2 className="mb-2 text-sm font-semibold uppercase text-ink-soft">Журнал действий</h2>
+      <details className="ascii-details border border-line bg-surface p-4">
+        <summary className="text-sm font-semibold uppercase text-ink">Журнал действий ({log.length})</summary>
         {log.length === 0 ? (
           <EmptyState title="Записей нет" />
         ) : (
-          <Card className="p-0">
+          <Card className="mt-4 p-0">
             <ul className="divide-y divide-line">
               {log.map((e) => (
                 <li key={e.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
@@ -68,7 +52,7 @@ export default async function StaffPage() {
             </ul>
           </Card>
         )}
-      </section>
+      </details>
     </div>
   );
 }

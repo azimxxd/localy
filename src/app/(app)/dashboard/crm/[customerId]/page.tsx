@@ -7,12 +7,14 @@
  */
 
 import Link from 'next/link';
-import { Badge, Card, EmptyState, Stat } from '@/components/ui/kit';
+import { Badge, Card, EmptyState, Stat, btnClass } from '@/components/ui/kit';
 import { getActiveBusiness } from '@/lib/demo';
 import { ACTIVITY_LABELS, ACTIVITY_TONE, explainActivity, LEVEL_LABELS } from '@/lib/engine';
 import { feedKindLabel } from '@/lib/feed';
 import { dateShort, kzt, num, percent, plural, timeShort } from '@/lib/format';
 import { getRepo } from '@/lib/repo';
+import CustomerEditor from '@/components/crm/CustomerEditor';
+import { requireSession } from '@/lib/auth';
 
 export default async function CustomerCardPage({
   params,
@@ -20,6 +22,7 @@ export default async function CustomerCardPage({
   params: Promise<{ customerId: string }>;
 }) {
   const { customerId } = await params;
+  const session = await requireSession(['owner', 'admin', 'marketer', 'manager']);
   const repo = await getRepo();
   const business = await getActiveBusiness();
 
@@ -27,7 +30,12 @@ export default async function CustomerCardPage({
   if (!profile) {
     return <EmptyState title="Клиент не найден" hint="Возможно, он не состоит в этом заведении" />;
   }
-  const history = await repo.listTransactionsForCustomer(business.id, customerId);
+  const [history, branches, staff, promos] = await Promise.all([
+    repo.listTransactionsForCustomer(business.id, customerId),
+    repo.listBranches(business.id),
+    repo.listStaff(business.id),
+    repo.listPromos(business.id),
+  ]);
 
   const { customer, membership } = profile;
 
@@ -55,6 +63,11 @@ export default async function CustomerCardPage({
         </p>
       </Card>
 
+      <div className="flex flex-wrap gap-2">
+        <Link href="/dashboard/promos/new" className={btnClass('primary')}>Создать предложение</Link>
+        <Link href="/dashboard/campaigns" className={btnClass('secondary')}>Открыть рассылки</Link>
+      </div>
+
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Визитов" value={num(membership.visits)} />
         <Stat label="Средний чек" value={kzt(profile.avgCheck)} />
@@ -69,6 +82,18 @@ export default async function CustomerCardPage({
           }
         />
       </div>
+
+      <Card>
+        <div className="grid gap-3 text-sm sm:grid-cols-2 md:grid-cols-4">
+          <div><p className="text-xs text-ink-soft">В Localy с</p><p className="font-medium text-ink">{dateShort(customer.createdAt)}</p></div>
+          <div><p className="text-xs text-ink-soft">В этом бизнесе с</p><p className="font-medium text-ink">{dateShort(membership.firstSeen)}</p></div>
+          <div><p className="text-xs text-ink-soft">Всего потрачено</p><p className="font-medium text-ink">{kzt(membership.totalSpent)}</p></div>
+          <div><p className="text-xs text-ink-soft">Источник</p><p className="font-medium text-ink">{membership.source ?? 'QR на кассе'}</p></div>
+        </div>
+        <p className="mt-3 text-xs text-ink-soft">Согласие: {membership.consentChannels.length ? membership.consentChannels.join(', ') : 'не дано'}</p>
+      </Card>
+
+      {session.role !== 'marketer' ? <CustomerEditor customer={customer} membership={membership} canDelete={session.role === 'owner' || session.role === 'admin'} /> : null}
 
       {membership.favoriteItems.length > 0 ? (
         <Card>
@@ -98,7 +123,12 @@ export default async function CustomerCardPage({
                   </p>
                   <p className="text-xs text-ink-soft">
                     {dateShort(t.createdAt)}, {timeShort(t.createdAt)}
+                    {' · '}{branches.find((branch) => branch.id === t.branchId)?.title ?? 'Основная точка'}
+                    {' · '}{staff.find((employee) => employee.id === t.staffId)?.name ?? 'Система'}
                   </p>
+                  {t.status === 'pending_confirmation' ? <Badge tone="warning" className="mt-1">Ожидает подтверждения</Badge> : null}
+                  {t.promoId ? <p className="mt-1 text-xs text-brand">Акция: {promos.find((promo) => promo.id === t.promoId)?.title ?? t.promoId}</p> : null}
+                  {t.rewardTitle ? <p className="mt-1 text-xs text-ok">Награда: {t.rewardTitle}</p> : null}
                 </div>
                 <div className="text-right">
                   {t.amount > 0 ? <p className="tnum">{kzt(t.amount)}</p> : null}

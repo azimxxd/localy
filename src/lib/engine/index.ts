@@ -19,6 +19,7 @@ import type {
   Recommendation,
   Segment,
   SegmentCode,
+  RecommendationRuleSetting,
   Tool,
 } from '@/lib/types';
 
@@ -31,8 +32,10 @@ export * from '@/lib/engine/activity';
 export const SEGMENT_META: Record<SegmentCode, { title: string; description: string }> = {
   new: { title: 'Новые', description: 'Первый визит за последние 30 дней' },
   returning: { title: 'Вернувшиеся', description: 'Пришли повторно после первого визита' },
+  habit_forming: { title: 'Формируют привычку', description: 'Ходят несколько недель, но ещё не стали постоянными' },
   regular: { title: 'Постоянные', description: 'Ходят стабильно и часто' },
   loyal: { title: 'Лояльные', description: 'Давно с вами и много тратят' },
+  declining: { title: 'Активность снижается', description: 'Стали приходить реже своего обычного ритма' },
   lapsed: { title: 'Давно не приходили', description: 'Пропустили срок возврата в разы' },
   at_risk: { title: 'Под риском ухода', description: 'Пропустили ожидаемый период возвращения' },
   high_points: { title: 'Много бонусов', description: 'Накопили больше порога награды' },
@@ -45,6 +48,8 @@ export const SEGMENT_META: Record<SegmentCode, { title: string; description: str
   high_check: { title: 'Высокий средний чек', description: 'Тратят больше среднего по заведению' },
   no_booking: { title: 'Давно не записывались', description: 'Нет записи дольше обычного' },
   birthday_soon: { title: 'День рождения близко', description: 'День рождения в ближайшие 14 дней' },
+  campaign_arrival: { title: 'Пришли по акции', description: 'Вернулись после конкретного предложения' },
+  no_consent: { title: 'Без согласия на рассылку', description: 'Исключаются из всех кампаний' },
 };
 
 export interface SegmentContext {
@@ -53,6 +58,7 @@ export interface SegmentContext {
   redeemedPromosByCustomer: Record<string, number>;
   /** Дата последней записи: customerId → ISO. Нет записи — ключа нет. */
   lastBookingByCustomer: Record<string, string>;
+  campaignCustomers: string[];
   /** Средний чек по заведению — база для сегмента high_check. */
   businessAvgCheck: number;
   now?: string;
@@ -82,10 +88,14 @@ export function matchesSegment(code: SegmentCode, p: CustomerProfile, ctx: Segme
       return p.level === 'new' || lifetimeDays <= 30;
     case 'returning':
       return p.level === 'returning';
+    case 'habit_forming':
+      return p.level === 'habit_forming';
     case 'regular':
       return p.level === 'regular';
     case 'loyal':
       return p.level === 'loyal';
+    case 'declining':
+      return p.activity === 'declining';
     case 'lapsed':
       return p.activity === 'lapsed';
     case 'at_risk':
@@ -119,6 +129,10 @@ export function matchesSegment(code: SegmentCode, p: CustomerProfile, ctx: Segme
     }
     case 'birthday_soon':
       return isBirthdaySoon(p.customer.birthday, now);
+    case 'campaign_arrival':
+      return ctx.campaignCustomers.includes(p.customer.id);
+    case 'no_consent':
+      return p.membership.consentChannels.length === 0;
   }
 }
 
@@ -418,6 +432,17 @@ export function recommend(params: {
   return out.sort((a, b) => b.priority - a.priority);
 }
 
+export function applyRecommendationSettings(items: Recommendation[], settings: RecommendationRuleSetting[]): Recommendation[] {
+  const byId = new Map(settings.map((setting) => [setting.id, setting]));
+  return items
+    .filter((item) => byId.get(item.id)?.active !== false)
+    .map((item) => {
+      const setting = byId.get(item.id);
+      return setting ? { ...item, action: setting.actionText, priority: setting.priority } : item;
+    })
+    .sort((a, b) => b.priority - a.priority);
+}
+
 // ─────────────────────────────────────────────────────────────
 // План роста на 30 дней — результат онбординга
 // ─────────────────────────────────────────────────────────────
@@ -437,6 +462,43 @@ export function buildGrowthPlan(business: Business, tools: Tool[]): GrowthPlan {
       .slice(0, n)
       .map((t) => t.id);
 
+  const nicheLaunch: Record<Business['typeCode'], string[]> = {
+    coffee: [
+      'Опубликуйте сайт с меню и актуальными ценами',
+      'Запустите награду «Каждый шестой напиток бесплатно»',
+      'Поставьте QR-табличку на кассе и на столах',
+    ],
+    barber: [
+      'Откройте онлайн-запись и добавьте услуги мастеров',
+      'Настройте напоминание о следующей стрижке через 28 дней',
+      'Дайте скидку на первое посещение и бонус за друга',
+    ],
+    beauty: [
+      'Опубликуйте услуги, цены и свободные окна для записи',
+      'Настройте награду за пять посещений',
+      'Отправьте персональное напоминание к обычному сроку повтора',
+    ],
+    flower: [
+      'Опубликуйте каталог букетов по поводам и ценам',
+      'Добавьте быструю заявку на доставку',
+      'Настройте напоминания о днях рождения и важных датах',
+    ],
+    repair: [
+      'Опубликуйте перечень услуг и форму заявки на диагностику',
+      'Собирайте историю ремонтов, а не ожидайте еженедельных визитов',
+      'Запланируйте напоминание о диагностике через 4–6 месяцев',
+    ],
+    retail: [
+      'Соберите каталог ходовых товаров и опубликуйте сайт',
+      'Дайте стартовые бонусы за регистрацию по QR',
+      'Создайте первую акцию на товар с низким спросом',
+    ],
+  };
+
+  const acquisitionStep = business.goals.includes('new_customers')
+    ? 'Запустите предложение для первого визита'
+    : 'Пригласите вернуться тех, кто стал приходить реже';
+
   return {
     businessId: business.id,
     weeks: [
@@ -444,11 +506,7 @@ export function buildGrowthPlan(business: Business, tools: Tool[]): GrowthPlan {
         week: 1,
         title: 'Запуск: собираем клиентскую базу',
         toolIds: [...pick('retention', 1), ...pick('automation', 1)],
-        steps: [
-          'Настройте бонусную программу: сколько начислять и когда выдавать награду',
-          'Распечатайте QR-код заведения и поставьте на кассу',
-          'Обучите кассиров сканировать карту клиента при каждой покупке',
-        ],
+        steps: nicheLaunch[business.typeCode],
       },
       {
         week: 2,
@@ -465,7 +523,7 @@ export function buildGrowthPlan(business: Business, tools: Tool[]): GrowthPlan {
         title: 'Первая акция: возвращаем ушедших',
         toolIds: pick('marketing', 2),
         steps: [
-          'Выберите сегмент «под риском ухода»',
+          acquisitionStep,
           'Создайте акцию и посмотрите прогноз до запуска',
           'Отправьте рассылку тем, кто дал согласие',
         ],

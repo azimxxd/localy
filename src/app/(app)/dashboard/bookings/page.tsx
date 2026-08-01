@@ -10,6 +10,8 @@ import { getActiveBusiness } from '@/lib/demo';
 import { dateShort, timeShort } from '@/lib/format';
 import { getRepo } from '@/lib/repo';
 import type { BookingStatus } from '@/lib/types';
+import BookingActions from '@/components/bookings/BookingActions';
+import { requireSession } from '@/lib/auth';
 
 const STATUS: Record<BookingStatus, { label: string; tone: 'brand' | 'success' | 'warning' | 'muted' }> = {
   pending: { label: 'Ожидает', tone: 'warning' },
@@ -19,6 +21,7 @@ const STATUS: Record<BookingStatus, { label: string; tone: 'brand' | 'success' |
 };
 
 export default async function BookingsPage() {
+  await requireSession(['owner', 'admin', 'manager']);
   const repo = await getRepo();
   const business = await getActiveBusiness();
   const bookings = await repo.listBookings(business.id);
@@ -30,8 +33,8 @@ export default async function BookingsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-5">
       <header>
-        <h1 className="text-2xl font-bold text-ink">Онлайн-запись</h1>
-        <p className="text-sm text-ink-soft">Записи клиентов</p>
+        <p className="ascii-kicker">~/localy/bookings</p><h1 className="mt-1 text-2xl font-bold uppercase text-ink">+-- Записи и заявки --+</h1>
+        <p className="mt-1 text-sm text-ink-soft">Подтвердите, выполните или отмените</p>
       </header>
 
       {withNames.length === 0 ? (
@@ -39,14 +42,18 @@ export default async function BookingsPage() {
       ) : (
         <div className="space-y-2">
           {withNames.map(({ booking, customer }) => (
-            <Card key={booking.id} className="flex items-center justify-between gap-3 p-4">
+            <Card key={booking.id} className="p-4">
+              <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="font-medium text-ink">{booking.service}</p>
                 <p className="text-xs text-ink-soft">
-                  {customer?.name ?? 'Клиент'} · {dateShort(booking.at)}, {timeShort(booking.at)}
+                  {customer?.name ?? 'Клиент'} · {dateShort(booking.at)}{booking.kind === 'lead' ? '' : `, ${timeShort(booking.at)}`}
                 </p>
+                {booking.note ? <p className="mt-1 text-xs text-ink-soft">&gt; {booking.note}</p> : null}
               </div>
               <Badge tone={STATUS[booking.status].tone}>{STATUS[booking.status].label}</Badge>
+              </div>
+              <BookingActions businessId={business.id} bookingId={booking.id} status={booking.status} />
             </Card>
           ))}
         </div>

@@ -10,14 +10,22 @@
 
 import Link from 'next/link';
 import ClientQr from '@/components/me/ClientQr';
+import PendingPurchase from '@/components/me/PendingPurchase';
 import { Card } from '@/components/ui/kit';
 import { DEMO_CUSTOMER_ID } from '@/lib/demo';
 import { kzt, num, plural } from '@/lib/format';
 import { getRepo } from '@/lib/repo';
+import { getCustomerSessionId } from '@/lib/auth';
+
+export const dynamic = 'force-dynamic';
 
 export default async function MePage() {
+  const nowMs = new Date().getTime();
   const repo = await getRepo();
-  const customer = await repo.getCustomer(DEMO_CUSTOMER_ID);
+  const sessionCustomerId = await getCustomerSessionId();
+  const customerId = sessionCustomerId ?? DEMO_CUSTOMER_ID;
+  const existingCustomer = await repo.getCustomer(customerId);
+  const customer = existingCustomer ? await repo.rotateQrToken(customerId) : null;
   if (!customer) {
     return <p className="p-6 text-ink-soft">Демо-клиент не найден.</p>;
   }
@@ -25,10 +33,18 @@ export default async function MePage() {
   const memberships = await repo.listMembershipsForCustomer(customer.id);
   const cards = await Promise.all(
     memberships.map(async ({ business, membership }) => {
-      const loyalty = await repo.getLoyaltyConfig(business.id);
-      const toReward = Math.max(0, loyalty.rewardThreshold - membership.points);
-      const progress = Math.min(1, membership.points / loyalty.rewardThreshold);
-      return { business, membership, loyalty, toReward, progress };
+      const [loyalty, transactions] = await Promise.all([
+        repo.getLoyaltyConfig(business.id),
+        repo.listTransactionsForCustomer(business.id, customer.id),
+      ]);
+      const rewardEvery = loyalty.rewardEveryVisits ?? 6;
+      const rewardAvailable = Math.floor(membership.visits / rewardEvery) > (membership.claimedVisitRewards ?? 0);
+      const visitProgress = rewardAvailable ? rewardEvery : membership.visits % rewardEvery;
+      const visitsLeft = Math.max(0, rewardEvery - visitProgress);
+      const progress = Math.min(1, visitProgress / rewardEvery);
+      const expiryDaysLeft = loyalty.expiryDays === null ? null : Math.max(0, loyalty.expiryDays - Math.floor((nowMs - new Date(membership.lastSeen).getTime()) / 86_400_000));
+      const pending = transactions.filter((transaction) => transaction.status === 'pending_confirmation');
+      return { business, membership, loyalty, progress, pending, visitProgress, visitsLeft, rewardEvery, expiryDaysLeft };
     }),
   );
 
@@ -39,13 +55,23 @@ export default async function MePage() {
         <p className="text-sm text-ink-soft">Ваш QR действует во всех заведениях Localy</p>
       </header>
 
-      <ClientQr customerId={customer.id} initialToken={customer.qrToken} brandColor="#0f172a" />
+      <ClientQr customerId={customer.id} initialToken={customer.qrToken} brandColor="#0f172a" rotatable={Boolean(sessionCustomerId)} />
+
+      {sessionCustomerId ? cards.flatMap(({ business, pending }) => pending.map((transaction) => (
+        <PendingPurchase
+          key={transaction.id}
+          id={transaction.id}
+          businessName={business.name}
+          amount={transaction.amount}
+          redeemPoints={transaction.redeemedPoints ?? 0}
+        />
+      ))) : null}
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-soft">
           Мои заведения ({cards.length})
         </h2>
-        {cards.map(({ business, membership, loyalty, toReward, progress }) => (
+        {cards.map(({ business, membership, loyalty, progress, visitProgress, visitsLeft, rewardEvery, expiryDaysLeft }) => (
           <Link key={business.id} href={`/me/${business.id}`} className="block">
             <Card className="p-4">
               <div className="flex items-center justify-between gap-2">
@@ -64,10 +90,11 @@ export default async function MePage() {
                 />
               </div>
               <p className="mt-1 text-xs text-ink-soft">
-                {toReward > 0
-                  ? `Ещё ${num(toReward)} бонусов до «${loyalty.rewardTitle}»`
-                  : `Награда доступна: ${loyalty.rewardTitle}`}
+                {visitProgress >= rewardEvery
+                  ? `Награда доступна: ${loyalty.rewardTitle}`
+                  : `${visitProgress} из ${rewardEvery} посещений. Осталось ещё ${visitsLeft} до награды.`}
               </p>
+              {expiryDaysLeft !== null && membership.points > 0 ? <p className="mt-1 text-xs text-warn">{expiryDaysLeft > 0 ? `Бонусы сгорят через ${expiryDaysLeft} дн.` : 'Срок бонусов истёк — уточните баланс у бизнеса.'}</p> : null}
             </Card>
           </Link>
         ))}

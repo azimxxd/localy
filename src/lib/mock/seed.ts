@@ -17,10 +17,12 @@
 import { forecastPromo } from '@/lib/engine';
 import type {
   ActivityLogEntry,
+  AnonymousSale,
   Booking,
   Branch,
   Business,
   BusinessGoal,
+  BusinessQrStats,
   BusinessTool,
   BusinessType,
   BusinessTypeCode,
@@ -29,16 +31,21 @@ import type {
   Deposit,
   LoyaltyConfig,
   Membership,
+  Plan,
   Promo,
   PromoEvent,
   PromoKind,
+  RecommendationRuleSetting,
   SegmentCode,
   SiteConfig,
   Staff,
+  Subscription,
+  SubscriptionPayment,
   Template,
   Tool,
   ToolCategory,
   Transaction,
+  User,
 } from '@/lib/types';
 
 // ─────────────────────────────────────────────────────────────
@@ -90,11 +97,12 @@ const shift = (from: Date, days: number) => new Date(from.getTime() + days * DAY
 // ─────────────────────────────────────────────────────────────
 
 export const BUSINESS_TYPES: BusinessType[] = [
-  { id: 'bt_coffee', code: 'coffee', title: 'Кофейня', icon: 'coffee' },
-  { id: 'bt_barber', code: 'barber', title: 'Барбершоп', icon: 'scissors' },
-  { id: 'bt_beauty', code: 'beauty', title: 'Салон красоты', icon: 'sparkles' },
-  { id: 'bt_repair', code: 'repair', title: 'Ремонт техники', icon: 'wrench' },
-  { id: 'bt_retail', code: 'retail', title: 'Магазин', icon: 'shopping-bag' },
+  { id: 'bt_coffee', code: 'coffee', title: 'Кофейня', icon: 'coffee', defaultRepeatVisitDays: 5, activityThresholds: { declining: 1.3, atRisk: 2, lapsed: 3.5 } },
+  { id: 'bt_barber', code: 'barber', title: 'Барбершоп', icon: 'scissors', defaultRepeatVisitDays: 28, activityThresholds: { declining: 1.25, atRisk: 1.8, lapsed: 2.8 } },
+  { id: 'bt_beauty', code: 'beauty', title: 'Салон красоты', icon: 'sparkles', defaultRepeatVisitDays: 24, activityThresholds: { declining: 1.25, atRisk: 1.9, lapsed: 3 } },
+  { id: 'bt_flower', code: 'flower', title: 'Цветочный магазин', icon: 'flower-2', defaultRepeatVisitDays: 18, activityThresholds: { declining: 1.5, atRisk: 2.5, lapsed: 4 } },
+  { id: 'bt_repair', code: 'repair', title: 'Ремонт техники', icon: 'wrench', defaultRepeatVisitDays: 120, activityThresholds: { declining: 1.5, atRisk: 2.5, lapsed: 4 } },
+  { id: 'bt_retail', code: 'retail', title: 'Магазин', icon: 'shopping-bag', defaultRepeatVisitDays: 16, activityThresholds: { declining: 1.3, atRisk: 2, lapsed: 3.5 } },
 ];
 
 /** Типичный интервал между визитами в нише, дней. База для генерации истории. */
@@ -102,6 +110,7 @@ const CADENCE: Record<BusinessTypeCode, number> = {
   coffee: 5,
   barber: 28,
   beauty: 24,
+  flower: 18,
   repair: 120,
   retail: 16,
 };
@@ -110,6 +119,7 @@ const ITEMS: Record<BusinessTypeCode, string[]> = {
   coffee: ['Капучино', 'Латте', 'Раф', 'Американо', 'Круассан', 'Чизкейк', 'Матча', 'Эспрессо'],
   barber: ['Стрижка', 'Стрижка + борода', 'Бритьё', 'Камуфляж седины', 'Детская стрижка'],
   beauty: ['Маникюр', 'Педикюр', 'Окрашивание', 'Укладка', 'Уход за лицом', 'Брови'],
+  flower: ['Монобукет', 'Авторский букет', 'Розы', 'Пионы', 'Композиция', 'Доставка'],
   repair: ['Замена экрана', 'Замена батареи', 'Чистка от пыли', 'Ремонт разъёма', 'Диагностика'],
   retail: ['Футболка', 'Джинсы', 'Худи', 'Кроссовки', 'Куртка', 'Аксессуар'],
 };
@@ -207,7 +217,10 @@ const TEMPLATE_SEEDS: TemplateSeed[] = [
   ['tpl_repair_reminder', 'Профилактика техники', 'retention', ['repair'], 'campaign', '{name}, прошло полгода с последнего ремонта. Бесплатная диагностика до {date}.'],
   ['tpl_retail_season', 'Сезонная распродажа', 'marketing', ['retail'], 'promo', 'Новая коллекция: скидка {value}% первым покупателям.'],
   ['tpl_site_coffee', 'Сайт кофейни', 'marketing', ['coffee'], 'site', 'Мини-сайт: меню, акции, карта, бонусная программа.'],
+  ['tpl_site_barber', 'Сайт барбершопа', 'marketing', ['barber'], 'site', 'Контрастная витрина: мастера, услуги, цены и быстрая запись.'],
   ['tpl_site_beauty', 'Сайт салона', 'marketing', ['beauty'], 'site', 'Мини-сайт: услуги, мастера, онлайн-запись, отзывы.'],
+  ['tpl_site_flower', 'Сайт цветочного магазина', 'marketing', ['flower'], 'site', 'Каталог букетов, поводы, доставка и бонусы.'],
+  ['tpl_site_retail', 'Сайт небольшого магазина', 'marketing', ['retail'], 'site', 'Каталог новинок, категории, акции и клуб покупателей.'],
   ['tpl_site_repair', 'Сайт сервиса', 'marketing', ['repair'], 'site', 'Мини-сайт: услуги, сроки, цены, статус ремонта.'],
   ['tpl_upsell', 'Допродажа к заказу', 'sales', ['coffee', 'retail'], 'campaign', 'К вашему {item} отлично подойдёт {item2} — сегодня со скидкой.'],
   ['tpl_vip', 'Спасибо постоянным', 'retention', [], 'campaign', '{name}, вы с нами уже {months} месяцев. Держите {reward} — просто так.'],
@@ -285,6 +298,13 @@ function businessSeeds(now: Date): BusinessSeed[] {
         name,
         typeCode,
         city,
+        address: `${city}, центральный район`,
+        employeeCount: typeCode === 'coffee' ? 8 : 4,
+        branchCount: typeCode === 'coffee' ? 2 : 1,
+        offerings: [...ITEMS[typeCode]],
+        repeatVisitDays: CADENCE[typeCode],
+        currentTools: ['Instagram', 'WhatsApp', '2GIS'],
+        onboardingCompleted: true,
         avgCheck,
         goals,
         plan,
@@ -412,6 +432,7 @@ function daysSinceFor(
 interface HistoryResult {
   membership: Membership;
   transactions: Transaction[];
+  anonymousSales: AnonymousSale[];
 }
 
 function buildHistory(params: {
@@ -447,6 +468,7 @@ function buildHistory(params: {
   dates.reverse();
 
   const transactions: Transaction[] = [];
+  const anonymousSales: AnonymousSale[] = [];
   let points = 0;
   let totalSpent = 0;
   const favorite = rng.sample(items, rng.int(1, 2));
@@ -490,6 +512,13 @@ function buildHistory(params: {
     }
   });
 
+  // Чеки из внешней кассы без QR: по ним честно считаем долю
+  // идентифицированных покупок, а не рисуем её из числа включённых модулей.
+  transactions.filter((transaction) => transaction.kind === 'purchase' && transaction.status !== 'pending_confirmation' && transaction.status !== 'cancelled').forEach((transaction, index) => {
+    const copies = index % 4 === 0 ? 2 : 1;
+    for (let copy = 0; copy < copies; copy += 1) anonymousSales.push({ id: `anon_${transaction.id}_${copy + 1}`, businessId: transaction.businessId, branchId: transaction.branchId, amount: Math.max(100, Math.round(transaction.amount * (0.8 + rng.next() * 0.4))), items: transaction.items.slice(0, 2), createdAt: transaction.createdAt });
+  });
+
   const consentPool = ['telegram', 'sms', 'email', 'whatsapp', 'push'] as const;
   const consent = rng.chance(0.85) ? rng.sample(consentPool, rng.int(1, 3)) : [];
 
@@ -506,6 +535,7 @@ function buildHistory(params: {
       favoriteItems: favorite,
     },
     transactions: transactions.sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    anonymousSales: anonymousSales.sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
   };
 }
 
@@ -541,6 +571,11 @@ const PROMO_PLAN: Record<BusinessTypeCode, PromoSeedDef[]> = {
     { kind: 'winback', title: 'Скучаем по вам', value: 20, segment: 'at_risk', status: 'active', startOffset: -8, lengthDays: 20 },
     { kind: 'points', title: 'Бонусы за маникюр', value: 1000, segment: 'returning', status: 'scheduled', startOffset: 5, lengthDays: 14 },
   ],
+  flower: [
+    { kind: 'discount', title: 'Букет недели −15%', value: 15, segment: 'new', status: 'finished', startOffset: -28, lengthDays: 10 },
+    { kind: 'birthday', title: 'Цветы ко дню рождения', value: 10, segment: 'birthday_soon', status: 'active', startOffset: -5, lengthDays: 20 },
+    { kind: 'referral', title: 'Бонус за рекомендацию', value: 500, segment: 'loyal', status: 'draft', startOffset: 0, lengthDays: 30 },
+  ],
   repair: [
     { kind: 'coupon', title: 'Бесплатная диагностика', value: 3000, segment: 'lapsed', status: 'finished', startOffset: -60, lengthDays: 30 },
     { kind: 'discount', title: 'Замена батареи −10%', value: 10, segment: 'regular', status: 'active', startOffset: -10, lengthDays: 30 },
@@ -564,11 +599,17 @@ function promoCode(rng: Rng): string {
 // ─────────────────────────────────────────────────────────────
 
 export interface SeedData {
+  users: User[];
   businessTypes: BusinessType[];
   tools: Tool[];
   templates: Template[];
+  recommendationSettings: RecommendationRuleSetting[];
   businesses: Business[];
+  plans: Plan[];
+  subscriptions: Subscription[];
+  subscriptionPayments: SubscriptionPayment[];
   branches: Branch[];
+  businessQrStats: BusinessQrStats[];
   staff: Staff[];
   loyaltyConfigs: LoyaltyConfig[];
   siteConfigs: SiteConfig[];
@@ -576,6 +617,7 @@ export interface SeedData {
   customers: Customer[];
   memberships: Membership[];
   transactions: Transaction[];
+  anonymousSales: AnonymousSale[];
   promos: Promo[];
   promoEvents: PromoEvent[];
   campaigns: Campaign[];
@@ -592,14 +634,32 @@ export function generateSeed(nowInput?: Date): SeedData {
 
   const seeds = businessSeeds(now);
   const businesses = seeds.map((s) => s.business);
+  const plans: Plan[] = [
+    { tier: 'free', title: 'Старт', priceKzt: 0, description: 'Чтобы запустить первую карту лояльности', features: ['1 страница бизнеса', 'До 100 клиентов', '1 активная акция', 'Базовая статистика', 'Брендинг Localy'], limits: { customers: 100, campaignsPerMonth: 1, staff: 1, branches: 1, activePromos: 1 } },
+    { tier: 'basic', title: 'Бизнес', priceKzt: 14900, description: 'CRM, касса и рассылки для растущей точки', features: ['Полный сайт и CRM', 'До 2 000 клиентов', 'Сегментация и касса', 'До 5 сотрудников', '3 филиала', 'Шаблоны для вашей ниши'], limits: { customers: 2000, campaignsPerMonth: 8, staff: 5, branches: 3, activePromos: 5 } },
+    { tier: 'pro', title: 'Сеть', priceKzt: 29900, description: 'Автоматизация и расширенная аналитика', features: ['До 20 000 клиентов', 'Автоматические сценарии', 'Расширенная аналитика', 'До 20 сотрудников', '10 филиалов', 'Свой домен и интеграции', 'Приоритетная поддержка', 'Без брендинга Localy'], limits: { customers: 20000, campaignsPerMonth: 40, staff: 20, branches: 10, activePromos: 20 } },
+  ];
+  const recommendationSettings: RecommendationRuleSetting[] = [
+    { id: 'rec-lapsed', label: 'Клиенты давно не приходили', actionText: 'Создайте предложение на повторное посещение', priority: 5, active: true },
+    { id: 'rec-expiring', label: 'Бонусы скоро сгорят', actionText: 'Отправьте напоминание, пока бонусы не пропали', priority: 5, active: true },
+    { id: 'rec-at-risk', label: 'Постоянные стали приходить реже', actionText: 'Верните их персональным предложением, пока они не ушли', priority: 4, active: true },
+    { id: 'rec-birthday', label: 'Скоро день рождения', actionText: 'Настройте автоматический подарок ко дню рождения', priority: 3, active: true },
+    { id: 'rec-weekday', label: 'Слабый день недели', actionText: 'Запустите двойные бонусы в этот день', priority: 3, active: true },
+    { id: 'rec-compare', label: 'Сравнение акций', actionText: 'Повторите более удачный формат', priority: 2, active: true },
+    { id: 'rec-identified', label: 'Мало покупок с QR', actionText: 'Напомните кассирам предлагать бонусную карту на кассе', priority: 4, active: true },
+  ];
+  const subscriptions: Subscription[] = businesses.map((business) => ({ businessId: business.id, plan: business.plan, status: 'active', startedAt: iso(shift(now, -90)), nextBillingAt: business.plan === 'free' ? null : iso(shift(now, 18)) }));
+  const subscriptionPayments: SubscriptionPayment[] = businesses.filter((business) => business.plan !== 'free').flatMap((business, index) => [0, 1, 2].map((month) => ({ id: `pay_${business.id}_${month + 1}`, businessId: business.id, plan: business.plan, amountKzt: plans.find((plan) => plan.tier === business.plan)?.priceKzt ?? 0, status: 'demo' as const, at: iso(shift(now, -(index + month * 30 + 5))) })));
 
   const branches: Branch[] = [];
+  const businessQrStats: BusinessQrStats[] = [];
   const staff: Staff[] = [];
   const loyaltyConfigs: LoyaltyConfig[] = [];
   const siteConfigs: SiteConfig[] = [];
   const businessTools: BusinessTool[] = [];
   const memberships: Membership[] = [];
   const transactions: Transaction[] = [];
+  const anonymousSales: AnonymousSale[] = [];
   const promos: Promo[] = [];
   const promoEvents: PromoEvent[] = [];
   const campaigns: Campaign[] = [];
@@ -611,6 +671,11 @@ export function generateSeed(nowInput?: Date): SeedData {
 
   seeds.forEach((seed, bIndex) => {
     const b = seed.business;
+    businessQrStats.push({
+      businessId: b.id,
+      scans: 180 - bIndex * 21,
+      registrations: 74 - bIndex * 8,
+    });
 
     // ── филиалы ──
     const branchCount = b.typeCode === 'coffee' ? 2 : 1;
@@ -642,6 +707,16 @@ export function generateSeed(nowInput?: Date): SeedData {
         TEMPLATES.find((t) => t.kind === 'site' && t.businessTypes.includes(b.typeCode))?.id ??
         'tpl_site_coffee',
       published: bIndex < 3,
+      description: `${b.name}: ${ITEMS[b.typeCode].slice(0, 3).join(', ')}.`,
+      coverUrl: `/demo/${b.typeCode}-cover.svg`,
+      phone: bizBranches[0].phone,
+      workHours: 'Ежедневно, 09:00–21:00',
+      telegram: 'localy_demo',
+      whatsapp: bizBranches[0].phone,
+      instagram: b.slug,
+      primaryColor: b.brandColor,
+      fontStyle: 'clean',
+      catalog: ITEMS[b.typeCode].map((title, index) => ({ id: `item_${b.slug}_${index + 1}`, title, description: index === 0 ? 'Популярная позиция' : '', category: b.typeCode === 'coffee' ? 'Меню' : 'Основное', price: Math.max(500, Math.round((b.avgCheck * (0.45 + index * 0.08)) / 100) * 100), imageUrl: index < 3 ? `/demo/${b.typeCode}-cover.svg` : null, active: true })),
       sections: [
         { kind: 'hero', enabled: true, title: b.name, body: `${b.city}. Приходите — и копите бонусы с первого визита.` },
         { kind: 'about', enabled: true, title: 'О нас', body: 'Небольшое заведение, где вас помнят по имени.' },
@@ -649,6 +724,7 @@ export function generateSeed(nowInput?: Date): SeedData {
         { kind: 'promos', enabled: true, title: 'Акции', body: 'Актуальные предложения для гостей.' },
         { kind: 'loyalty', enabled: true, title: 'Бонусная программа', body: `${seed.loyalty.rewardThreshold} бонусов — ${seed.loyalty.rewardTitle.toLowerCase()}.` },
         { kind: 'booking', enabled: ['barber', 'beauty', 'repair'].includes(b.typeCode), title: 'Онлайн-запись', body: 'Выберите удобное время.' },
+        { kind: 'lead', enabled: !['barber', 'beauty', 'repair'].includes(b.typeCode), title: 'Оставить заявку', body: 'Задайте вопрос или закажите обратный звонок.' },
         { kind: 'contacts', enabled: true, title: 'Контакты', body: bizBranches[0].address },
       ],
     });
@@ -679,7 +755,7 @@ export function generateSeed(nowInput?: Date): SeedData {
 
     bizCustomers.forEach((c, i) => {
       const state = STATE_MIX[(i + bIndex * 3) % STATE_MIX.length];
-      const { membership, transactions: trx } = buildHistory({
+      const { membership, transactions: trx, anonymousSales: anonymous } = buildHistory({
         rng,
         now,
         business: b,
@@ -691,6 +767,7 @@ export function generateSeed(nowInput?: Date): SeedData {
       });
       memberships.push(membership);
       transactions.push(...trx);
+      anonymousSales.push(...anonymous);
     });
 
     // ── акции ──
@@ -727,7 +804,8 @@ export function generateSeed(nowInput?: Date): SeedData {
       if (p.status === 'finished' || p.status === 'active') {
         const recipients = rng.sample(bizCustomers, audience);
         const opened = recipients.slice(0, Math.round(audience * rng.float(0.55, 0.7)));
-        const visited = opened.slice(0, Math.round(opened.length * rng.float(0.3, 0.45)));
+        const clicked = opened.slice(0, Math.round(opened.length * rng.float(0.55, 0.8)));
+        const visited = clicked.slice(0, Math.round(clicked.length * rng.float(0.45, 0.65)));
         const redeemed = visited.slice(0, Math.round(visited.length * rng.float(0.7, 0.85)));
         const stageAt = (offset: number) => iso(shift(startsAt, offset));
         const lateDay = () => rng.int(2, Math.max(3, p.lengthDays - 1));
@@ -737,6 +815,9 @@ export function generateSeed(nowInput?: Date): SeedData {
         );
         opened.forEach((c) =>
           promoEvents.push({ promoId: promo.id, customerId: c.id, stage: 'opened', at: stageAt(1) }),
+        );
+        clicked.forEach((c) =>
+          promoEvents.push({ promoId: promo.id, customerId: c.id, stage: 'clicked', at: stageAt(1) }),
         );
         visited.forEach((c) =>
           promoEvents.push({ promoId: promo.id, customerId: c.id, stage: 'visited', at: stageAt(lateDay()) }),
@@ -754,6 +835,11 @@ export function generateSeed(nowInput?: Date): SeedData {
           audienceSize: recipients.length,
           body: `${p.title}. Промокод ${promo.promocode}.`,
           sentAt: stageAt(0),
+          recipientIds: recipients.map((customer) => customer.id),
+          opened: opened.length,
+          clicked: clicked.length,
+          visited: visited.length,
+          redeemed: redeemed.length,
           simulated: true,
         });
       }
@@ -770,6 +856,7 @@ export function generateSeed(nowInput?: Date): SeedData {
           customerId: c.id,
           service: rng.pick(ITEMS[b.typeCode]),
           at: iso(at),
+          kind: 'booking',
           status: past
             ? rng.chance(0.85)
               ? 'done'
@@ -816,12 +903,47 @@ export function generateSeed(nowInput?: Date): SeedData {
     });
   });
 
+  const primaryBusinessId = businesses[0]?.id ?? null;
+  const primaryStaff = staff.filter((item) => item.businessId === primaryBusinessId);
+  // Пароль всех демонстрационных аккаунтов: Localy2026.
+  const passwordHash = 'sha256:a2b5365e905702d9c7d18398af98a3f337e039571f8d55f95ccbffc68af14575';
+  const user = (
+    id: string,
+    login: string,
+    name: string,
+    role: User['role'],
+    staffRole?: Staff['role'],
+  ): User => ({
+    id,
+    login,
+    name,
+    passwordHash,
+    role,
+    businessId: role === 'platform_admin' ? null : primaryBusinessId,
+    staffId: primaryStaff.find((item) => item.role === staffRole)?.id ?? null,
+    active: true,
+    createdAt: iso(now),
+  });
+  const users: User[] = [
+    user('usr_owner', 'owner@localy.kz', 'Азим Сериков', 'owner', 'owner'),
+    user('usr_business_admin', 'admin@localy.kz', 'Дана Калиева', 'admin', 'admin'),
+    user('usr_marketer', 'marketing@localy.kz', 'Мадина Нурланова', 'marketer', 'marketer'),
+    user('usr_cashier', 'cashier@localy.kz', 'Алмас Есенов', 'cashier', 'cashier'),
+    user('usr_platform', 'platform@localy.kz', 'Админ Localy', 'platform_admin'),
+  ];
+
   return {
+    users,
     businessTypes: BUSINESS_TYPES,
     tools: TOOLS,
     templates: TEMPLATES,
+    recommendationSettings,
     businesses,
+    plans,
+    subscriptions,
+    subscriptionPayments,
     branches,
+    businessQrStats,
     staff,
     loyaltyConfigs,
     siteConfigs,
@@ -829,6 +951,7 @@ export function generateSeed(nowInput?: Date): SeedData {
     customers,
     memberships,
     transactions: transactions.sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    anonymousSales: anonymousSales.sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     promos,
     promoEvents,
     campaigns,

@@ -14,29 +14,38 @@ import { feedKindLabel } from '@/lib/feed';
 import { dateShort, kzt, num } from '@/lib/format';
 import { PROMO_KIND_LABELS } from '@/lib/promo-labels';
 import { getRepo } from '@/lib/repo';
+import { getCustomerSessionId } from '@/lib/auth';
+import ConsentPreferences from '@/components/me/ConsentPreferences';
 
 export default async function MeBusinessPage({
   params,
 }: {
   params: Promise<{ businessId: string }>;
 }) {
+  const nowMs = new Date().getTime();
   const { businessId } = await params;
   const repo = await getRepo();
+  const sessionCustomerId = await getCustomerSessionId();
+  const customerId = sessionCustomerId ?? DEMO_CUSTOMER_ID;
 
   const [business, membership] = await Promise.all([
     repo.getBusiness(businessId),
-    repo.getMembership(businessId, DEMO_CUSTOMER_ID),
+    repo.getMembership(businessId, customerId),
   ]);
   if (!business || !membership) notFound();
 
   const [loyalty, history, promos] = await Promise.all([
     repo.getLoyaltyConfig(businessId),
-    repo.listTransactionsForCustomer(businessId, DEMO_CUSTOMER_ID),
+    repo.listTransactionsForCustomer(businessId, customerId),
     repo.listPromos(businessId),
   ]);
 
   const toReward = Math.max(0, loyalty.rewardThreshold - membership.points);
-  const progress = Math.min(1, membership.points / loyalty.rewardThreshold);
+  const rewardEvery = loyalty.rewardEveryVisits ?? 6;
+  const rewardAvailable = Math.floor(membership.visits / rewardEvery) > (membership.claimedVisitRewards ?? 0);
+  const visitProgress = rewardAvailable ? rewardEvery : membership.visits % rewardEvery;
+  const progress = Math.min(1, visitProgress / rewardEvery);
+  const expiryDaysLeft = loyalty.expiryDays === null ? null : Math.max(0, loyalty.expiryDays - Math.floor((nowMs - new Date(membership.lastSeen).getTime()) / 86_400_000));
   const offers = promos.filter((p) => p.status === 'active');
 
   return (
@@ -57,8 +66,10 @@ export default async function MeBusinessPage({
           <div className="h-full rounded-full bg-brand" style={{ width: `${Math.round(progress * 100)}%` }} />
         </div>
         <p className="mt-1 text-xs text-ink-soft">
-          {toReward > 0 ? `Ещё ${num(toReward)} до «${loyalty.rewardTitle}»` : `Награда доступна: ${loyalty.rewardTitle}`}
+          {visitProgress >= rewardEvery ? `Награда доступна: ${loyalty.rewardTitle}` : `${visitProgress} из ${rewardEvery} посещений · ещё ${rewardEvery - visitProgress} до награды`}
         </p>
+        <p className="mt-2 text-xs text-ink-soft">До бонусной награды осталось: {num(toReward)} бонусов</p>
+        {expiryDaysLeft !== null && membership.points > 0 ? <p className="mt-1 text-xs text-warn">{expiryDaysLeft > 0 ? `До сгорания бонусов: ${expiryDaysLeft} дн.` : 'Срок бонусов истёк.'}</p> : null}
       </Card>
 
       {offers.length > 0 ? (
@@ -75,6 +86,8 @@ export default async function MeBusinessPage({
           ))}
         </section>
       ) : null}
+
+      {sessionCustomerId ? <ConsentPreferences businessId={businessId} initial={membership.consentChannels} /> : null}
 
       <section className="space-y-2">
         <h2 className="text-sm font-semibold uppercase text-ink-soft">История</h2>

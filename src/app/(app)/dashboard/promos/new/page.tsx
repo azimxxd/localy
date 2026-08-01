@@ -11,11 +11,13 @@ import PromoBuilder from '@/components/promos/PromoBuilder';
 import { getActiveBusiness } from '@/lib/demo';
 import { PROMO_VALUE_MEANING } from '@/lib/engine';
 import { getRepo } from '@/lib/repo';
+import { requireSession } from '@/lib/auth';
 
 export default async function NewPromoPage() {
+  await requireSession(['owner', 'admin', 'marketer']);
   const repo = await getRepo();
   const business = await getActiveBusiness();
-  const segments = await repo.listSegments(business.id);
+  const [segments, branches] = await Promise.all([repo.listSegments(business.id), repo.listBranches(business.id)]);
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
@@ -30,6 +32,7 @@ export default async function NewPromoPage() {
           .filter((s) => s.count > 0)
           .map((s) => ({ code: s.code, title: s.title, count: s.count }))}
         valueMeaning={PROMO_VALUE_MEANING}
+        branches={branches}
       />
     </div>
   );

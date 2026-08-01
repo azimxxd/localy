@@ -1,15 +1,18 @@
 /**
- * Localy — реализация Repo поверх сгенерированных демо-данных.
+ * Localy — локальная реализация Repo поверх сгенерированных демо-данных.
  *
  * Вызывающие: getRepo() из src/lib/repo/index.ts. Напрямую не импортировать.
  *
- * Живёт в памяти процесса. Записи (покупка, акция, рассылка) видны до
- * перезапуска dev-сервера — этого достаточно и для разработки экранов,
- * и для записи демо-видео. Тот же контракт потом закрывает supabase.ts.
+ * Состояние хранится в data/localy.json и переживает перезапуск сервера.
+ * Файл создаётся из детерминированного seed при первом запуске. Для сброса
+ * есть resetDemoData(), доступный только администратору платформы.
  *
  * Схемы данных — только из src/lib/types.ts, своих не заводит.
  */
 
+import 'server-only';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import {
   buildCustomerProfile,
   buildGrowthPlan,
@@ -32,10 +35,13 @@ import type {
 import {
   QR_ROTATION_SECONDS,
   REDEEM_CONFIRM_THRESHOLD,
+  MAX_CAMPAIGNS_PER_MONTH,
   type ActivityLogEntry,
   type Booking,
+  type Branch,
   type Business,
   type BusinessStats,
+  type BusinessQrStats,
   type Campaign,
   type Customer,
   type CustomerProfile,
@@ -43,6 +49,7 @@ import {
   type Membership,
   type NotificationChannel,
   type PlatformStats,
+  type Plan,
   type Promo,
   type PromoEvent,
   type PromoFunnel,
@@ -53,6 +60,7 @@ import {
   type Template,
   type Tool,
   type Transaction,
+  type User,
 } from '@/lib/types';
 
 // ─────────────────────────────────────────────────────────────
@@ -61,8 +69,67 @@ import {
 
 let db: SeedData | null = null;
 
+const DATA_FILE = process.env.LOCALY_DATA_FILE
+  ? path.resolve(process.env.LOCALY_DATA_FILE)
+  : path.join(/* turbopackIgnore: true */ process.cwd(), 'data', 'localy.json');
+const DATA_TMP_FILE = `${DATA_FILE}.tmp`;
+
+function persist() {
+  if (!db) return;
+  mkdirSync(path.dirname(DATA_FILE), { recursive: true });
+  writeFileSync(DATA_TMP_FILE, `${JSON.stringify(db, null, 2)}\n`, 'utf8');
+  renameSync(DATA_TMP_FILE, DATA_FILE);
+}
+
 function state(): SeedData {
-  if (!db) db = generateSeed();
+  if (!db) {
+    if (existsSync(DATA_FILE)) {
+      const loaded = JSON.parse(readFileSync(DATA_FILE, 'utf8')) as SeedData;
+      const seed = generateSeed();
+      const mergeMissingById = <T extends { id: string }>(current: T[] | undefined, defaults: T[]) => {
+        const result = current ?? [];
+        const ids = new Set(result.map((item) => item.id));
+        return [...result, ...defaults.filter((item) => !ids.has(item.id))];
+      };
+      const mergeFieldsById = <T extends { id: string }>(current: T[] | undefined, defaults: T[]) => {
+        const byId = new Map(defaults.map((item) => [item.id, item]));
+        return (current ?? defaults).map((item) => ({ ...(byId.get(item.id) ?? {}), ...item } as T));
+      };
+      const siteConfigs = (loaded.siteConfigs ?? seed.siteConfigs).map((item) => {
+        const fallback = seed.siteConfigs.find((candidate) => candidate.businessId === item.businessId);
+        const sections = [...item.sections, ...(fallback?.sections ?? []).filter((section) => !item.sections.some((current) => current.kind === section.kind))];
+        return { ...(fallback ?? {}), ...item, sections };
+      });
+      const promoEvents = [...(loaded.promoEvents ?? seed.promoEvents)];
+      const plans = (loaded.plans ?? seed.plans).map((item) => ({
+        ...(seed.plans.find((candidate) => candidate.tier === item.tier) ?? {}),
+        ...item,
+        features: seed.plans.find((candidate) => candidate.tier === item.tier)?.features ?? item.features,
+      }));
+      const promoIds = new Set(promoEvents.map((event) => event.promoId));
+      promoIds.forEach((promoId) => {
+        if (promoEvents.some((event) => event.promoId === promoId && event.stage === 'clicked')) return;
+        promoEvents.filter((event) => event.promoId === promoId && event.stage === 'opened').filter((_, index) => index % 3 !== 2).forEach((event) => promoEvents.push({ ...event, stage: 'clicked' }));
+      });
+      db = {
+        ...seed,
+        ...loaded,
+        users: mergeMissingById(loaded.users, seed.users),
+        businessTypes: mergeFieldsById(loaded.businessTypes, seed.businessTypes),
+        tools: mergeMissingById(loaded.tools, seed.tools),
+        templates: mergeMissingById(loaded.templates, seed.templates),
+        businesses: mergeFieldsById(loaded.businesses, seed.businesses),
+        plans,
+        siteConfigs,
+        campaigns: mergeFieldsById(loaded.campaigns, seed.campaigns),
+        recommendationSettings: mergeMissingById(loaded.recommendationSettings, seed.recommendationSettings),
+        promoEvents,
+      };
+    } else {
+      db = generateSeed();
+      persist();
+    }
+  }
   return db;
 }
 
@@ -104,6 +171,18 @@ function loyaltyOf(businessId: string): LoyaltyConfig {
   };
 }
 
+function planOf(businessId: string): Plan {
+  const business = state().businesses.find((item) => item.id === businessId);
+  const plan = state().plans.find((item) => item.tier === (business?.plan ?? 'free'));
+  if (!plan) throw new Error('Тариф бизнеса не настроен');
+  return plan;
+}
+
+function assertPlanLimit(businessId: string, key: keyof Plan['limits'], current: number, noun: string) {
+  const plan = planOf(businessId);
+  if (current >= plan.limits[key]) throw new Error(`Лимит тарифа «${plan.title}»: ${plan.limits[key]} ${noun}. Выберите другой тариф.`);
+}
+
 function transactionsOf(businessId: string, customerId: string): Transaction[] {
   return state().transactions.filter(
     (t) => t.businessId === businessId && t.customerId === customerId,
@@ -116,6 +195,8 @@ function profileOf(businessId: string, customerId: string): CustomerProfile | nu
     (m) => m.businessId === businessId && m.customerId === customerId,
   );
   const customer = s.customers.find((c) => c.id === customerId);
+  const business = s.businesses.find((item) => item.id === businessId);
+  const businessType = s.businessTypes.find((item) => item.code === business?.typeCode);
   if (!membership || !customer) return null;
 
   return buildCustomerProfile({
@@ -123,6 +204,8 @@ function profileOf(businessId: string, customerId: string): CustomerProfile | nu
     membership,
     transactions: transactionsOf(businessId, customerId),
     loyalty: loyaltyOf(businessId),
+    fallbackIntervalDays: business?.repeatVisitDays ?? businessType?.defaultRepeatVisitDays ?? 30,
+    activityThresholds: businessType?.activityThresholds,
   });
 }
 
@@ -154,11 +237,17 @@ function segmentContext(businessId: string): SegmentContext {
     });
 
   const business = s.businesses.find((b) => b.id === businessId);
+  const campaignCustomers = [...new Set(
+    s.promoEvents
+      .filter((event) => promoIds.has(event.promoId) && (event.stage === 'visited' || event.stage === 'redeemed'))
+      .map((event) => event.customerId),
+  )];
 
   return {
     loyalty: loyaltyOf(businessId),
     redeemedPromosByCustomer,
     lastBookingByCustomer,
+    campaignCustomers,
     businessAvgCheck: business?.avgCheck ?? 3000,
   };
 }
@@ -192,9 +281,50 @@ function logAction(
 
 export function createMockRepo(): Repo {
   const repo: Repo = {
+    // ── Пользователи и demo-auth ──
+    async listUsers() {
+      return clone(state().users);
+    },
+
+    async getUser(id) {
+      return clone(state().users.find((user) => user.id === id) ?? null);
+    },
+
+    async getUserByLogin(login) {
+      const normalized = login.trim().toLowerCase();
+      return clone(state().users.find((user) => user.login.toLowerCase() === normalized) ?? null);
+    },
+
+    async createUser(input) {
+      if (state().users.some((user) => user.login.toLowerCase() === input.login.toLowerCase())) {
+        throw new Error('Пользователь с этим логином уже есть');
+      }
+      const user: User = { ...input, id: uid('usr'), createdAt: nowIso() };
+      state().users.push(user);
+      return clone(user);
+    },
+
+    async updateUser(id, patch) {
+      const user = state().users.find((item) => item.id === id);
+      if (!user) throw new Error(`Пользователь ${id} не найден`);
+      Object.assign(user, patch, { id });
+      return clone(user);
+    },
+
+    async resetDemoData() {
+      db = generateSeed();
+    },
+
     // ── Справочники платформы ──
     async listBusinessTypes() {
       return clone(state().businessTypes);
+    },
+
+    async updateBusinessType(id, patch) {
+      const type = state().businessTypes.find((item) => item.id === id);
+      if (!type) throw new Error('Категория бизнеса не найдена');
+      Object.assign(type, patch, { id });
+      return clone(type);
     },
 
     async listTools(filter?: ToolFilter) {
@@ -290,12 +420,34 @@ export function createMockRepo(): Repo {
       s.businesses.forEach((b) => byType.set(b.typeCode, (byType.get(b.typeCode) ?? 0) + 1));
 
       return {
-        activeBusinesses: s.businesses.length,
+        activeBusinesses: s.businesses.filter((business) => business.active !== false).length,
         totalCustomers: s.customers.length,
         totalTransactions: s.transactions.length,
         popularTools,
         businessesByType: [...byType.entries()].map(([typeCode, count]) => ({ typeCode, count })),
       };
+    },
+
+    async listRecommendationSettings() {
+      return clone(state().recommendationSettings);
+    },
+
+    async updateRecommendationSetting(id, patch) {
+      const setting = state().recommendationSettings.find((item) => item.id === id);
+      if (!setting) throw new Error('Правило рекомендации не найдено');
+      Object.assign(setting, patch, { id });
+      return clone(setting);
+    },
+
+    async listPlans() {
+      return clone(state().plans);
+    },
+
+    async updatePlan(tier, patch) {
+      const plan = state().plans.find((item) => item.tier === tier);
+      if (!plan) throw new Error(`Тариф ${tier} не найден`);
+      Object.assign(plan, patch, { tier });
+      return clone(plan);
     },
 
     // ── Бизнес ──
@@ -315,18 +467,30 @@ export function createMockRepo(): Repo {
       const business: Business = { ...input, id: uid('biz'), createdAt: nowIso() };
       const s = state();
       s.businesses.push(business);
+      s.subscriptions.push({
+        businessId: business.id,
+        plan: business.plan,
+        status: 'active',
+        startedAt: nowIso(),
+        nextBillingAt: business.plan === 'free' ? null : new Date(Date.now() + 30 * 86_400_000).toISOString(),
+      });
       s.loyaltyConfigs.push({
         businessId: business.id,
         pointsPerCurrency: 0.05,
         rewardThreshold: 1000,
         rewardTitle: 'Награда постоянному клиенту',
         expiryDays: 90,
+        maxRedemptionPercent: 20,
+        startBonus: 100,
+        minPurchaseAmount: 500,
+        excludedItems: [],
+        rewardEveryVisits: 6,
       });
       s.branches.push({
         id: uid('brn'),
         businessId: business.id,
         title: 'Основная точка',
-        address: business.city,
+        address: business.address || business.city,
         phone: '',
       });
       s.staff.push({
@@ -348,8 +512,70 @@ export function createMockRepo(): Repo {
       return clone(b);
     },
 
+    async getSubscription(businessId) {
+      const business = state().businesses.find((item) => item.id === businessId);
+      if (!business) throw new Error('Бизнес не найден');
+      const subscription = state().subscriptions.find((item) => item.businessId === businessId);
+      return clone(subscription ?? { businessId, plan: business.plan, status: 'active', startedAt: business.createdAt, nextBillingAt: business.plan === 'free' ? null : new Date(Date.now() + 30 * 86_400_000).toISOString() });
+    },
+
+    async listSubscriptionPayments(businessId) {
+      return clone(state().subscriptionPayments.filter((item) => item.businessId === businessId).sort((a, b) => b.at.localeCompare(a.at)));
+    },
+
+    async changeSubscription(businessId, tier) {
+      const s = state();
+      const business = s.businesses.find((item) => item.id === businessId);
+      const plan = s.plans.find((item) => item.tier === tier);
+      if (!business || !plan) throw new Error('Бизнес или тариф не найден');
+      business.plan = tier;
+      let subscription = s.subscriptions.find((item) => item.businessId === businessId);
+      if (!subscription) {
+        subscription = { businessId, plan: tier, status: 'active', startedAt: nowIso(), nextBillingAt: null };
+        s.subscriptions.push(subscription);
+      }
+      subscription.plan = tier;
+      subscription.status = 'active';
+      subscription.nextBillingAt = tier === 'free' ? null : new Date(Date.now() + 30 * 86_400_000).toISOString();
+      s.subscriptionPayments.push({ id: uid('pay'), businessId, plan: tier, amountKzt: plan.priceKzt, status: 'demo', at: nowIso() });
+      logAction(businessId, 'subscription_changed', `Тариф изменён на «${plan.title}»`, { tier, amountKzt: plan.priceKzt });
+      return clone(subscription);
+    },
+
     async listBranches(businessId) {
       return clone(state().branches.filter((b) => b.businessId === businessId));
+    },
+
+    async createBranch(input) {
+      assertPlanLimit(input.businessId, 'branches', state().branches.filter((item) => item.businessId === input.businessId).length, 'филиалов');
+      const branch: Branch = { ...input, id: uid('brn') };
+      state().branches.push(branch);
+      logAction(input.businessId, 'branch_created', `Добавлен филиал «${branch.title}»`);
+      return clone(branch);
+    },
+
+    async updateBranch(id, patch) {
+      const branch = state().branches.find((item) => item.id === id);
+      if (!branch) throw new Error(`Филиал ${id} не найден`);
+      Object.assign(branch, patch, { id });
+      logAction(branch.businessId, 'branch_updated', `Обновлён филиал «${branch.title}»`, { branchId: id });
+      return clone(branch);
+    },
+
+    async getBusinessQrStats(businessId) {
+      const stats = state().businessQrStats.find((item) => item.businessId === businessId);
+      return clone(stats ?? { businessId, scans: 0, registrations: 0 });
+    },
+
+    async incrementBusinessQrStat(businessId, kind) {
+      let stats = state().businessQrStats.find((item) => item.businessId === businessId);
+      if (!stats) {
+        stats = { businessId, scans: 0, registrations: 0 } satisfies BusinessQrStats;
+        state().businessQrStats.push(stats);
+      }
+      if (kind === 'scan') stats.scans += 1;
+      else stats.registrations += 1;
+      return clone(stats);
     },
 
     async getLoyaltyConfig(businessId) {
@@ -434,6 +660,7 @@ export function createMockRepo(): Repo {
     },
 
     async createStaff(input) {
+      assertPlanLimit(input.businessId, 'staff', state().staff.filter((item) => item.businessId === input.businessId && item.active !== false).length, 'сотрудников');
       const staff: Staff = { ...input, id: uid('stf') };
       state().staff.push(staff);
       logAction(input.businessId, 'staff_added', `Добавлен сотрудник ${staff.name}`, {
@@ -446,6 +673,7 @@ export function createMockRepo(): Repo {
       const st = state().staff.find((s) => s.id === id);
       if (!st) throw new Error(`Сотрудник ${id} не найден`);
       Object.assign(st, patch, { id });
+      logAction(st.businessId, 'staff_updated', `Изменён доступ сотрудника ${st.name}`, { staffId: id, patch });
       return clone(st);
     },
 
@@ -468,8 +696,8 @@ export function createMockRepo(): Repo {
     async resolveQrToken(qrToken) {
       const c = state().customers.find((x) => x.qrToken === qrToken);
       if (!c) return null;
-      // В демо просроченный токен не отклоняем: между сканом и записью покупки
-      // на видео проходит больше QR_ROTATION_SECONDS. В проде — проверка срока.
+      const ageSeconds = (Date.now() - new Date(c.qrRotatedAt).getTime()) / 1000;
+      if (ageSeconds > QR_ROTATION_SECONDS + 5) return null;
       return clone(c);
     },
 
@@ -484,6 +712,20 @@ export function createMockRepo(): Repo {
         createdAt: nowIso(),
       };
       state().customers.push(customer);
+      return clone(customer);
+    },
+
+    async updateCustomer(id, patch) {
+      const customer = state().customers.find((item) => item.id === id);
+      if (!customer) throw new Error(`Клиент ${id} не найден`);
+      if (patch.phone) {
+        const digits = patch.phone.replace(/\D/g, '');
+        const duplicate = state().customers.find(
+          (item) => item.id !== id && item.phone.replace(/\D/g, '') === digits,
+        );
+        if (duplicate) throw new Error('Клиент с этим телефоном уже есть');
+      }
+      Object.assign(customer, patch, { id });
       return clone(customer);
     },
 
@@ -523,11 +765,12 @@ export function createMockRepo(): Repo {
         (m) => m.businessId === businessId && m.customerId === customerId,
       );
       if (existing) return clone(existing);
+      assertPlanLimit(businessId, 'customers', s.memberships.filter((item) => item.businessId === businessId).length, 'клиентов');
 
       const membership: Membership = {
         businessId,
         customerId,
-        points: 0,
+        points: loyaltyOf(businessId).startBonus ?? 0,
         visits: 0,
         firstSeen: nowIso(),
         lastSeen: nowIso(),
@@ -546,6 +789,51 @@ export function createMockRepo(): Repo {
       if (!m) throw new Error('Клиент не состоит в этом заведении');
       m.consentChannels = channels;
       return clone(m);
+    },
+
+    async updateMembership(businessId, customerId, patch) {
+      const membership = state().memberships.find(
+        (item) => item.businessId === businessId && item.customerId === customerId,
+      );
+      if (!membership) throw new Error('Клиент не состоит в программе этого бизнеса');
+      Object.assign(membership, patch, { businessId, customerId });
+      return clone(membership);
+    },
+
+    async removeCustomerFromBusiness(businessId, customerId, actorId) {
+      const s = state();
+      if (!s.memberships.some((item) => item.businessId === businessId && item.customerId === customerId)) throw new Error('Клиент не состоит в этой программе');
+      s.memberships = s.memberships.filter((item) => !(item.businessId === businessId && item.customerId === customerId));
+      logAction(businessId, 'customer_removed', 'Клиент удалён из CRM бизнеса', { customerId, actorId });
+    },
+
+    async adjustPoints(businessId, customerId, staffId, delta, note) {
+      const s = state();
+      const membership = s.memberships.find(
+        (item) => item.businessId === businessId && item.customerId === customerId,
+      );
+      if (!membership) throw new Error('Бонусный счёт не найден');
+      if (!Number.isInteger(delta) || delta === 0) throw new Error('Укажите ненулевое целое число бонусов');
+      if (membership.points + delta < 0) throw new Error('Нельзя списать больше текущего баланса');
+      const transaction: Transaction = {
+        id: uid('trx'),
+        businessId,
+        branchId: null,
+        customerId,
+        staffId,
+        amount: 0,
+        pointsDelta: delta,
+        accruedPoints: Math.max(0, delta),
+        redeemedPoints: Math.max(0, -delta),
+        status: 'completed',
+        kind: delta > 0 ? 'accrue' : 'redeem',
+        items: note ? [note] : [],
+        createdAt: nowIso(),
+      };
+      s.transactions.push(transaction);
+      membership.points += delta;
+      logAction(businessId, delta > 0 ? 'points_accrued_manual' : 'points_redeemed_manual', `${delta > 0 ? 'Начислено' : 'Списано'} ${Math.abs(delta)} бонусов вручную`, { customerId, delta, note });
+      return clone(transaction);
     },
 
     async getCustomerProfile(businessId, customerId) {
@@ -570,7 +858,19 @@ export function createMockRepo(): Repo {
         );
       }
 
-      out.sort((a, b) => b.membership.lastSeen.localeCompare(a.membership.lastSeen));
+      if (filter?.activity) out = out.filter((profile) => profile.activity === filter.activity);
+      if (filter?.level) out = out.filter((profile) => profile.level === filter.level);
+      if (filter?.minPoints) out = out.filter((profile) => profile.membership.points >= filter.minPoints!);
+      if (filter?.minDaysSince) out = out.filter((profile) => profile.daysSinceLastVisit >= filter.minDaysSince!);
+      if (filter?.consent === 'yes') out = out.filter((profile) => profile.membership.consentChannels.length > 0);
+      if (filter?.consent === 'no') out = out.filter((profile) => profile.membership.consentChannels.length === 0);
+
+      out.sort((a, b) => {
+        if (filter?.sort === 'points') return b.membership.points - a.membership.points;
+        if (filter?.sort === 'spent') return b.membership.totalSpent - a.membership.totalSpent;
+        if (filter?.sort === 'visits') return b.membership.visits - a.membership.visits;
+        return b.membership.lastSeen.localeCompare(a.membership.lastSeen);
+      });
 
       const offset = filter?.offset ?? 0;
       const limit = filter?.limit ?? out.length;
@@ -584,6 +884,10 @@ export function createMockRepo(): Repo {
           (t) => t.businessId === businessId && inRange(t.createdAt, range),
         ),
       );
+    },
+
+    async getTransaction(id) {
+      return clone(state().transactions.find((transaction) => transaction.id === id) ?? null);
     },
 
     async listTransactionsForCustomer(businessId, customerId) {
@@ -601,8 +905,14 @@ export function createMockRepo(): Repo {
      */
     async recordPurchase(input: PosPurchaseInput): Promise<PosPurchaseResult> {
       const s = state();
-      const customer = s.customers.find((c) => c.qrToken === input.qrToken);
-      if (!customer) throw new Error('QR-код не распознан');
+      const customer = input.customerId
+        ? s.customers.find((item) => item.id === input.customerId)
+        : s.customers.find((item) => item.qrToken === input.qrToken);
+      if (!customer) throw new Error('Клиент или QR-код не распознан');
+      if (!input.customerId) {
+        const ageSeconds = (Date.now() - new Date(customer.qrRotatedAt).getTime()) / 1000;
+        if (ageSeconds > QR_ROTATION_SECONDS + 5) throw new Error('QR-код истёк. Попросите клиента обновить его');
+      }
 
       const loyalty = loyaltyOf(input.businessId);
 
@@ -616,8 +926,32 @@ export function createMockRepo(): Repo {
       )!;
 
       const redeem = Math.min(Math.max(0, input.redeemPoints), membership.points);
-      const accrued = Math.round(input.amount * loyalty.pointsPerCurrency);
+      const excluded = (loyalty.excludedItems ?? []).map((item) => item.toLowerCase());
+      if (redeem > 0 && input.items.some((item) => excluded.includes(item.toLowerCase()))) {
+        throw new Error('На одну из выбранных позиций нельзя списывать бонусы');
+      }
+      const promo = input.promoId ? s.promos.find((item) => item.id === input.promoId && item.businessId === input.businessId) : null;
+      if (input.promoId && (!promo || promo.status !== 'active' || promo.endsAt < nowIso())) throw new Error('Акция недоступна или завершена');
+      if (promo?.placements && !promo.placements.includes('cashier')) throw new Error('Эту акцию нельзя применить на кассе');
+      if (promo?.branchId && promo.branchId !== input.branchId) throw new Error('Акция не действует в этом филиале');
+      const hasExcludedItem = input.items.some((item) => excluded.includes(item.toLowerCase()));
+      let accrued = hasExcludedItem ? 0 : Math.round(input.amount * loyalty.pointsPerCurrency);
+      if (promo?.kind === 'double_points') accrued *= 2;
+      if (promo?.kind === 'points') accrued += promo.value;
       const pointsDelta = accrued - redeem;
+      const maxRedeem = Math.floor(input.amount * ((loyalty.maxRedemptionPercent ?? 20) / 100));
+      if (redeem > maxRedeem) {
+        throw new Error(`Можно списать не более ${maxRedeem} бонусов (${loyalty.maxRedemptionPercent ?? 20}% чека)`);
+      }
+      if (input.amount < (loyalty.minPurchaseAmount ?? 0)) {
+        throw new Error(`Минимальная сумма для бонусов — ${loyalty.minPurchaseAmount} ₸`);
+      }
+      const requiresConfirmation = redeem > REDEEM_CONFIRM_THRESHOLD;
+      const every = loyalty.rewardEveryVisits ?? 6;
+      const earnedRewards = Math.floor(membership.visits / every);
+      const rewardAvailable = earnedRewards > (membership.claimedVisitRewards ?? 0);
+      if (input.claimReward && !rewardAvailable) throw new Error('Награда пока недоступна');
+      const rewardTitle = input.claimReward ? loyalty.rewardTitle : promo?.kind === 'gift' ? promo.title : null;
 
       const transaction: Transaction = {
         id: uid('trx'),
@@ -627,40 +961,81 @@ export function createMockRepo(): Repo {
         staffId: input.staffId,
         amount: input.amount,
         pointsDelta,
+        accruedPoints: accrued,
+        redeemedPoints: redeem,
+        status: requiresConfirmation ? 'pending_confirmation' : 'completed',
+        rewardTitle,
+        promoId: promo?.id ?? null,
         kind: 'purchase',
         items: input.items,
         createdAt: nowIso(),
       };
       s.transactions.push(transaction);
 
-      membership.points += pointsDelta;
-      membership.visits += 1;
-      membership.lastSeen = transaction.createdAt;
-      membership.totalSpent += input.amount;
-      input.items.forEach((item) => {
-        if (!membership.favoriteItems.includes(item)) membership.favoriteItems.push(item);
-      });
-
-      logAction(input.businessId, 'purchase', `Покупка ${input.amount} ₸ — ${customer.name}`, {
-        customerId: customer.id,
-        amount: input.amount,
-      });
-      emitTransaction(transaction);
+      if (!requiresConfirmation) {
+        membership.points += pointsDelta;
+        membership.visits += 1;
+        membership.lastSeen = transaction.createdAt;
+        membership.totalSpent += input.amount;
+        if (input.claimReward) membership.claimedVisitRewards = (membership.claimedVisitRewards ?? 0) + 1;
+        input.items.forEach((item) => {
+          if (!membership.favoriteItems.includes(item)) membership.favoriteItems.push(item);
+        });
+        logAction(input.businessId, 'purchase', `Покупка ${input.amount} ₸ — ${customer.name}`, {
+          customerId: customer.id,
+          amount: input.amount,
+        });
+        emitTransaction(transaction);
+        if (promo) {
+          const at = transaction.createdAt;
+          if (!s.promoEvents.some((event) => event.promoId === promo.id && event.customerId === customer.id && event.stage === 'visited')) s.promoEvents.push({ promoId: promo.id, customerId: customer.id, stage: 'visited', at });
+          s.promoEvents.push({ promoId: promo.id, customerId: customer.id, stage: 'redeemed', at });
+        }
+      } else {
+        logAction(input.businessId, 'redeem_pending', `Ожидается подтверждение списания — ${customer.name}`, {
+          customerId: customer.id,
+          amount: input.amount,
+          redeem,
+        });
+      }
 
       return {
         transaction: clone(transaction),
         membership: clone(membership),
-        requiresConfirmation: redeem > REDEEM_CONFIRM_THRESHOLD,
-        rewardUnlocked: membership.points >= loyalty.rewardThreshold,
+        requiresConfirmation,
+        rewardUnlocked: Math.floor(membership.visits / every) > (membership.claimedVisitRewards ?? 0),
       };
     },
 
     async confirmRedeem(transactionId) {
-      // В демо подтверждение не откатывает транзакцию — она уже записана.
-      // Флаг requiresConfirmation нужен интерфейсу кассы, чтобы показать
-      // экран подтверждения клиенту. В проде здесь двухфазная запись.
-      const t = state().transactions.find((x) => x.id === transactionId);
+      const s = state();
+      const t = s.transactions.find((x) => x.id === transactionId);
       if (!t) throw new Error(`Транзакция ${transactionId} не найдена`);
+      if (t.status !== 'pending_confirmation') return clone(t);
+      const membership = s.memberships.find(
+        (item) => item.businessId === t.businessId && item.customerId === t.customerId,
+      );
+      if (!membership) throw new Error('Бонусный счёт клиента не найден');
+      const redeem = t.redeemedPoints ?? Math.max(0, -t.pointsDelta);
+      if (redeem > membership.points) throw new Error('На счёте уже недостаточно бонусов');
+      membership.points += t.pointsDelta;
+      membership.visits += 1;
+      membership.lastSeen = t.createdAt;
+      membership.totalSpent += t.amount;
+      if (t.rewardTitle && !t.promoId) membership.claimedVisitRewards = (membership.claimedVisitRewards ?? 0) + 1;
+      t.items.forEach((item) => {
+        if (!membership.favoriteItems.includes(item)) membership.favoriteItems.push(item);
+      });
+      t.status = 'completed';
+      if (t.promoId) {
+        if (!s.promoEvents.some((event) => event.promoId === t.promoId && event.customerId === t.customerId && event.stage === 'visited')) s.promoEvents.push({ promoId: t.promoId, customerId: t.customerId, stage: 'visited', at: nowIso() });
+        s.promoEvents.push({ promoId: t.promoId, customerId: t.customerId, stage: 'redeemed', at: nowIso() });
+      }
+      logAction(t.businessId, 'redeem_confirmed', `Клиент подтвердил списание ${redeem} бонусов`, {
+        transactionId: t.id,
+        customerId: t.customerId,
+      });
+      emitTransaction(t);
       return clone(t);
     },
 
@@ -711,6 +1086,7 @@ export function createMockRepo(): Repo {
     },
 
     async createPromo(input: CreatePromoInput) {
+      assertPlanLimit(input.businessId, 'activePromos', state().promos.filter((item) => item.businessId === input.businessId && (item.status === 'active' || item.status === 'scheduled')).length, 'активных акций');
       const segment = segmentsOf(input.businessId).find((x) => x.code === input.segment);
       const forecast = await repo.forecastPromo(input);
 
@@ -721,6 +1097,11 @@ export function createMockRepo(): Repo {
         title: input.title,
         value: input.value,
         segment: input.segment,
+        goal: input.goal,
+        branchId: input.branchId ?? null,
+        channel: input.channel ?? 'telegram',
+        placements: input.placements ?? ['site', 'client_app'],
+        body: input.body,
         audienceSize: segment?.count ?? 0,
         startsAt: input.startsAt,
         endsAt: input.endsAt,
@@ -753,7 +1134,7 @@ export function createMockRepo(): Repo {
       const promo = s.promos.find((p) => p.id === id);
       if (!promo) throw new Error(`Акция ${id} не найдена`);
 
-      promo.status = 'active';
+      promo.status = promo.startsAt > nowIso() ? 'scheduled' : 'active';
       const segment = segmentsOf(promo.businessId).find((x) => x.code === promo.segment);
       const recipients = (segment?.customerIds ?? []).filter((cid) => {
         const m = s.memberships.find(
@@ -763,6 +1144,10 @@ export function createMockRepo(): Repo {
       });
 
       promo.audienceSize = recipients.length;
+      if (promo.status === 'scheduled') {
+        logAction(promo.businessId, 'promo_scheduled', `Акция «${promo.title}» запланирована`, { promoId: promo.id, startsAt: promo.startsAt });
+        return clone(promo);
+      }
       const at = nowIso();
       recipients.forEach((customerId) => {
         s.promoEvents.push({ promoId: promo.id, customerId, stage: 'sent', at });
@@ -789,6 +1174,7 @@ export function createMockRepo(): Repo {
         promoId,
         sent: count('sent'),
         opened: count('opened'),
+        clicked: count('clicked'),
         visited: count('visited'),
         redeemed,
         // Выручка акции: воспользовавшиеся × средний чек, за вычетом скидки.
@@ -818,16 +1204,32 @@ export function createMockRepo(): Repo {
     },
 
     async createCampaign(input: CreateCampaignInput) {
+      const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
+      assertPlanLimit(input.businessId, 'campaignsPerMonth', state().campaigns.filter((item) => item.businessId === input.businessId && (item.sentAt ?? '') >= monthAgo).length, 'рассылок в месяц');
       const segment = segmentsOf(input.businessId).find((x) => x.code === input.audienceSegment);
+      const eligibleIds = (segment?.customerIds ?? []).filter((customerId) => {
+        const membership = state().memberships.find(
+          (item) => item.businessId === input.businessId && item.customerId === customerId,
+        );
+        if (!membership?.consentChannels.includes(input.channel)) return false;
+        const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+        const recent = state().campaigns.filter((item) => item.businessId === input.businessId && Boolean(item.sentAt) && item.sentAt! >= since && item.recipientIds?.includes(customerId)).length;
+        return recent < MAX_CAMPAIGNS_PER_MONTH;
+      });
       const campaign: Campaign = {
         id: uid('cmp'),
         businessId: input.businessId,
         promoId: input.promoId,
         channel: input.channel,
         audienceSegment: input.audienceSegment,
-        audienceSize: segment?.count ?? 0,
+        audienceSize: eligibleIds.length,
         body: input.body,
         sentAt: null,
+        recipientIds: eligibleIds,
+        opened: 0,
+        clicked: 0,
+        visited: 0,
+        redeemed: 0,
         simulated: true,
       };
       state().campaigns.push(campaign);
@@ -845,19 +1247,41 @@ export function createMockRepo(): Repo {
 
       campaign.sentAt = nowIso();
       campaign.simulated = true;
+      campaign.opened = Math.round(campaign.audienceSize * 0.63);
+      campaign.clicked = Math.round(campaign.audienceSize * 0.42);
+      campaign.visited = Math.round(campaign.audienceSize * 0.23);
+      campaign.redeemed = campaign.promoId ? Math.round(campaign.audienceSize * 0.17) : 0;
 
       const promoId = campaign.promoId;
       if (promoId) {
         const segment = segmentsOf(campaign.businessId).find(
           (x) => x.code === campaign.audienceSegment,
         );
-        const ids = segment?.customerIds ?? [];
+        const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+        const businessPromoIds = new Set(s.promos.filter((promo) => promo.businessId === campaign.businessId).map((promo) => promo.id));
+        const ids = (campaign.recipientIds ?? segment?.customerIds ?? []).filter((customerId) => {
+          const membership = s.memberships.find(
+            (item) => item.businessId === campaign.businessId && item.customerId === customerId,
+          );
+          if (!membership?.consentChannels.includes(campaign.channel)) return false;
+          const recent = s.promoEvents.filter(
+            (event) => event.customerId === customerId && event.stage === 'sent' && event.at >= since && businessPromoIds.has(event.promoId),
+          ).length;
+          return recent < MAX_CAMPAIGNS_PER_MONTH;
+        });
+        campaign.audienceSize = ids.length;
+        campaign.recipientIds = ids;
+        campaign.opened = Math.round(ids.length * 0.63);
+        campaign.clicked = Math.round(ids.length * 0.42);
+        campaign.visited = Math.round(ids.length * 0.23);
+        campaign.redeemed = Math.round(ids.length * 0.17);
         const at = campaign.sentAt;
         const take = (share: number) => ids.slice(0, Math.round(ids.length * share));
 
         const stages: [PromoStage, number][] = [
           ['sent', 1],
           ['opened', 0.63],
+          ['clicked', 0.42],
           ['visited', 0.23],
           ['redeemed', 0.17],
         ];
@@ -880,15 +1304,7 @@ export function createMockRepo(): Repo {
     async countRecentCampaigns(businessId, customerId) {
       const s = state();
       const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
-      const promoIds = new Set(s.promos.filter((p) => p.businessId === businessId).map((p) => p.id));
-
-      return s.promoEvents.filter(
-        (e) =>
-          e.stage === 'sent' &&
-          e.customerId === customerId &&
-          promoIds.has(e.promoId) &&
-          e.at >= since,
-      ).length;
+      return s.campaigns.filter((campaign) => campaign.businessId === businessId && Boolean(campaign.sentAt) && campaign.sentAt! >= since && campaign.recipientIds?.includes(customerId)).length;
     },
 
     // ── Аналитика ──
@@ -898,9 +1314,12 @@ export function createMockRepo(): Repo {
       const inPeriod = s.transactions.filter(
         (t) => t.businessId === businessId && inRange(t.createdAt, period),
       );
-      const purchases = inPeriod.filter((t) => t.kind === 'purchase');
+      const purchases = inPeriod.filter(
+        (t) => t.kind === 'purchase' && t.status !== 'pending_confirmation' && t.status !== 'cancelled',
+      );
+      const anonymousSales = s.anonymousSales.filter((sale) => sale.businessId === businessId && inRange(sale.createdAt, period));
 
-      const revenue = purchases.reduce((sum, t) => sum + t.amount, 0);
+      const revenue = purchases.reduce((sum, t) => sum + t.amount, 0) + anonymousSales.reduce((sum, sale) => sum + sale.amount, 0);
       const profiles = profilesOf(businessId);
 
       const newCustomers = s.memberships.filter(
@@ -915,30 +1334,36 @@ export function createMockRepo(): Repo {
 
       const items = new Map<string, number>();
       purchases.forEach((t) => t.items.forEach((i) => items.set(i, (items.get(i) ?? 0) + 1)));
+      anonymousSales.forEach((sale) => sale.items.forEach((item) => items.set(item, (items.get(item) ?? 0) + 1)));
 
       const byWeekday = Array.from({ length: 7 }, (_, weekday) => ({
         weekday,
-        visits: purchases.filter((t) => new Date(t.createdAt).getDay() === weekday).length,
+        visits: purchases.filter((t) => new Date(t.createdAt).getDay() === weekday).length + anonymousSales.filter((sale) => new Date(sale.createdAt).getDay() === weekday).length,
       }));
 
       const atRisk = profiles.filter(
         (p) => p.activity === 'at_risk' || p.activity === 'lapsed',
       ).length;
 
-      // Доля покупок, привязанных к клиентской карте. В моке анонимных чеков
-      // нет — оцениваем по зрелости заведения: чем больше активировано
-      // инструментов, тем выше привязка. В проде считается из кассовых данных.
-      const activated = s.businessTools.filter(
-        (bt) => bt.businessId === businessId && bt.activatedAt !== null,
-      ).length;
+      const totalSales = purchases.length + anonymousSales.length;
+      const activePromo = s.promos.find((promo) => promo.businessId === businessId && promo.status === 'active');
+      const activeEvents = activePromo ? s.promoEvents.filter((event) => event.promoId === activePromo.id) : [];
+      const sentCount = new Set(activeEvents.filter((event) => event.stage === 'sent').map((event) => event.customerId)).size;
+      const redeemedCount = new Set(activeEvents.filter((event) => event.stage === 'redeemed').map((event) => event.customerId)).size;
 
       return {
+        totalCustomers: profiles.length,
         newCustomers,
         returningCustomers,
-        visits: purchases.length,
-        avgCheck: purchases.length ? Math.round(revenue / purchases.length) : 0,
+        repeatVisits: purchases.filter((transaction) => {
+          const membership = s.memberships.find((item) => item.businessId === businessId && item.customerId === transaction.customerId);
+          return (membership?.visits ?? 0) > 1;
+        }).length,
+        visits: totalSales,
+        avgCheck: totalSales ? Math.round(revenue / totalSales) : 0,
         activeCustomers: profiles.filter((p) => p.activity === 'active').length,
         atRiskShare: profiles.length ? Math.round((atRisk / profiles.length) * 100) / 100 : 0,
+        atRiskCustomers: atRisk,
         pointsAccrued: inPeriod
           .filter((t) => t.pointsDelta > 0)
           .reduce((sum, t) => sum + t.pointsDelta, 0),
@@ -946,7 +1371,9 @@ export function createMockRepo(): Repo {
           inPeriod.filter((t) => t.pointsDelta < 0).reduce((sum, t) => sum + t.pointsDelta, 0),
         ),
         revenue,
-        identifiedShare: Math.min(0.92, 0.35 + activated * 0.03),
+        pointsUnspent: s.memberships.filter((membership) => membership.businessId === businessId).reduce((sum, membership) => sum + membership.points, 0),
+        activePromoConversion: sentCount > 0 ? redeemedCount / sentCount : 0,
+        identifiedShare: totalSales ? purchases.length / totalSales : 0,
         topItems: [...items.entries()]
           .map(([title, count]) => ({ title, count }))
           .sort((a, b) => b.count - a.count)
@@ -985,6 +1412,7 @@ export function createMockRepo(): Repo {
       const b = state().bookings.find((x) => x.id === id);
       if (!b) throw new Error(`Запись ${id} не найдена`);
       Object.assign(b, patch, { id });
+      logAction(b.businessId, 'booking_updated', `Статус записи изменён: ${b.service}`, { bookingId: id, status: b.status });
       return clone(b);
     },
 
@@ -1011,5 +1439,67 @@ export function createMockRepo(): Repo {
     },
   };
 
-  return repo;
+  const mutatingMethods = new Set<keyof Repo>([
+    'updateUser',
+    'createUser',
+    'resetDemoData',
+    'updateBusinessType',
+    'updateRecommendationSetting',
+    'createTool',
+    'updateTool',
+    'deleteTool',
+    'createTemplate',
+    'updateTemplate',
+    'deleteTemplate',
+    'updatePlan',
+    'createBusiness',
+    'updateBusiness',
+    'changeSubscription',
+    'createBranch',
+    'updateBranch',
+    'incrementBusinessQrStat',
+    'updateLoyaltyConfig',
+    'updateSiteConfig',
+    'activateTool',
+    'deactivateTool',
+    'toggleFavorite',
+    'createStaff',
+    'updateStaff',
+    'deleteStaff',
+    'createCustomer',
+    'updateCustomer',
+    'rotateQrToken',
+    'joinBusiness',
+    'updateConsent',
+    'updateMembership',
+    'removeCustomerFromBusiness',
+    'adjustPoints',
+    'recordPurchase',
+    'confirmRedeem',
+    'createPromo',
+    'updatePromo',
+    'launchPromo',
+    'createCampaign',
+    'simulateSend',
+    'createBooking',
+    'updateBooking',
+  ]);
+
+  return new Proxy(repo, {
+    get(target, property, receiver) {
+      const original = Reflect.get(target, property, receiver) as unknown;
+      if (
+        typeof property !== 'string' ||
+        !mutatingMethods.has(property as keyof Repo) ||
+        typeof original !== 'function'
+      ) {
+        return original;
+      }
+      return async (...args: unknown[]) => {
+        const result = await (original as (...callArgs: unknown[]) => unknown)(...args);
+        persist();
+        return result;
+      };
+    },
+  });
 }
