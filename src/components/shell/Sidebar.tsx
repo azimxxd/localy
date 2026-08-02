@@ -14,7 +14,7 @@ import { useTransition } from 'react';
 import { switchBusiness } from '@/app/(app)/actions';
 import { logoutAction } from '@/app/login/actions';
 import { cn } from '@/lib/cn';
-import type { UserRole } from '@/lib/types';
+import { USER_ROLE_LABELS, type UserRole } from '@/lib/types';
 
 const NAV = [
   { href: '/dashboard', label: 'Обзор', roles: ['owner', 'admin', 'marketer', 'manager'] },
@@ -39,6 +39,7 @@ const SETTINGS_NAV = [
 const PLATFORM_NAV = [
   { href: '/admin', label: 'Управление' },
   { href: '/admin/stats', label: 'Аналитика платформы' },
+  { href: '/admin#demo-reset', label: 'Сброс демо' },
 ];
 
 export default function Sidebar({
@@ -80,7 +81,7 @@ export default function Sidebar({
         <details className="relative md:hidden">
           <summary className="list-none border border-line px-3 py-2 text-sm font-semibold text-ink">Все разделы</summary>
           <div className="fixed inset-x-3 top-16 z-50 max-h-[72vh] overflow-y-auto border border-line bg-surface p-3 shadow-xl">
-            <div className="mb-3 flex items-center justify-between border-b border-line pb-2"><div><p className="font-semibold text-ink">{userName}</p><p className="text-xs text-ink-soft">Навигация и настройки</p></div><span className="text-xs text-ink-soft">Выберите раздел</span></div>
+            <div className="mb-3 flex items-center justify-between border-b border-line pb-2"><div><p className="font-semibold text-ink">{userName}</p><p className="text-xs text-ink-soft">Навигация и настройки</p></div></div>
             <nav className="grid grid-cols-2 gap-2">{[...mainItems, ...settingsItems].map((item) => <Link key={item.href} href={item.href} onClick={(event) => closeMobileMenu(event.currentTarget)} className={cn('border px-3 py-3 text-sm', isActive(item.href) ? 'border-brand bg-brand-soft text-brand' : 'border-line text-ink')}>{item.label}</Link>)}</nav>
             {role !== 'platform_admin' ? <Link href="/pos" onClick={(event) => closeMobileMenu(event.currentTarget)} className="mt-3 block border border-brand px-3 py-3 text-center text-sm font-semibold text-brand">Открыть кассу</Link> : null}
             <form action={logoutAction} className="mt-3 border-t border-line pt-3"><button className="w-full px-3 py-2 text-left text-sm text-ink-soft">Выйти из кабинета</button></form>
@@ -127,7 +128,7 @@ export default function Sidebar({
       </nav>
 
       <nav aria-label="Быстрая мобильная навигация" className="fixed inset-x-0 bottom-0 z-50 grid border-t border-line bg-surface/95 px-2 pb-[max(.45rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur md:hidden" style={{ gridTemplateColumns: `repeat(${Math.max(1, mobileItems.length)}, minmax(0, 1fr))` }}>
-        {mobileItems.map((item) => <Link key={item.href} href={item.href} className={cn('min-w-0 border-t-2 px-1 py-2 text-center text-[11px] leading-tight', isActive(item.href) ? 'border-brand text-brand' : 'border-transparent text-ink-soft')}>{item.label.replace('Сайт бизнеса', 'Сайт')}</Link>)}
+        {mobileItems.map((item) => <Link key={item.href} href={item.href} className={cn('flex min-h-11 min-w-0 items-center justify-center border-t-2 px-1 py-2 text-center text-[11px] leading-tight', isActive(item.href) ? 'border-brand text-brand' : 'border-transparent text-ink-soft')}>{item.label.replace('Сайт бизнеса', 'Сайт')}</Link>)}
       </nav>
 
       {role !== 'platform_admin' ? <nav aria-label="Настройки" className="hidden flex-col gap-1 border-t border-line pt-4 md:flex">
@@ -156,7 +157,7 @@ export default function Sidebar({
         <div className="overflow-hidden border border-line bg-canvas">
           <div className="px-3 py-2.5">
             <p className="truncate text-xs font-medium text-ink">{userName}</p>
-            <p className="mt-1 text-xs text-ink-soft">{role === 'platform_admin' ? 'Адин Localy' : role}</p>
+            <p className="mt-1 text-xs text-ink-soft">{USER_ROLE_LABELS[role]}</p>
           </div>
           <form action={logoutAction} className="border-t border-line">
             <button className="w-full px-3 py-2.5 text-left text-ink-soft hover:bg-surface hover:text-ink">

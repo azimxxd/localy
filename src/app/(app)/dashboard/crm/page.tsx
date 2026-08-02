@@ -62,8 +62,8 @@ export default async function CrmPage({
             {activeSegment ? ` · сегмент «${activeSegment.title}»` : ''}
           </p>
         </div>
-        <div className="relative flex items-end gap-2">
-          <div className="w-64"><CrmSearch /></div>
+        <div className="relative flex w-full flex-wrap items-end gap-2 sm:w-auto">
+          <div className="min-w-0 flex-1 sm:w-64 sm:flex-none"><CrmSearch /></div>
           <AddCustomer businessId={business.id} />
         </div>
       </header>

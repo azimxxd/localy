@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react';
 import { registerAndJoin } from '@/app/join/[slug]/actions';
-import { Button, TextInput } from '@/components/ui/kit';
+import { Button, DemoNote, TextInput } from '@/components/ui/kit';
 
 export default function JoinForm({ slug }: { slug: string }) {
   const action = registerAndJoin.bind(null, slug);
@@ -19,7 +19,7 @@ export default function JoinForm({ slug }: { slug: string }) {
           <p className="border border-line bg-canvas p-3 text-sm text-ink-soft">
             Код отправлен на {values.phone}. Он действует 5 минут.
           </p>
-          {state.devCode ? <p data-dev-code={state.devCode} className="border border-warn bg-warn-soft p-3 text-sm text-ink">Локальный код: <strong className="tnum">{state.devCode}</strong></p> : null}
+          {state.devCode ? <DemoNote className="text-sm"><span data-dev-code={state.devCode}>OTP — демо-код: SMS не отправляется. Введите <strong className="tnum text-ink">{state.devCode}</strong>.</span></DemoNote> : null}
           <TextInput label="Код из SMS" name="verificationCode" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required autoFocus />
         </>
       ) : (

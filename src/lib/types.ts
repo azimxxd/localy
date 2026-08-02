@@ -673,3 +673,13 @@ export const REDEEM_CONFIRM_THRESHOLD = 1000;
 
 /** Антиспам: максимум рассылок на одного клиента за 30 дней. */
 export const MAX_CAMPAIGNS_PER_MONTH = 4;
+
+/** Человеческие названия ролей. В интерфейсе не показываем коды вроде `marketer`. */
+export const USER_ROLE_LABELS: Record<UserRole, string> = {
+  owner: 'Владелец',
+  admin: 'Администратор',
+  marketer: 'Маркетолог',
+  manager: 'Управляющий',
+  cashier: 'Кассир',
+  platform_admin: 'Админ Localy',
+};

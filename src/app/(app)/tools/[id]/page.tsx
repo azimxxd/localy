@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import CopyToolText from '@/components/tools/CopyToolText';
 import DepositManager from '@/components/tools/DepositManager';
-import { Badge, Card, EmptyState, btnClass } from '@/components/ui/kit';
+import { Badge, Card, DemoNote, EmptyState, btnClass } from '@/components/ui/kit';
 import { requireSession } from '@/lib/auth';
 import { getActiveBusiness } from '@/lib/demo';
 import { kzt, num } from '@/lib/format';
@@ -62,7 +62,7 @@ export default async function ToolWorkspacePage({ params }: { params: Promise<{ 
   } else if (id === 'tool_deposits') {
     const [profiles, deposits] = await Promise.all([repo.listCustomerProfiles(business.id), repo.listDeposits(business.id)]);
     const names = new Map(profiles.map((profile) => [profile.customer.id, profile.customer.name]));
-    content = <DepositManager customers={profiles.map((profile) => ({ id: profile.customer.id, name: profile.customer.name, phone: profile.customer.phone }))} deposits={deposits.map((deposit) => ({ ...deposit, customerName: names.get(deposit.customerId) ?? 'Клиент' }))} />;
+    content = <div className="space-y-4"><DemoNote>Сертификаты, депозиты и абонементы — внутренняя модель Localy. Реальные деньги не проходят, эквайринга нет.</DemoNote><DepositManager customers={profiles.map((profile) => ({ id: profile.customer.id, name: profile.customer.name, phone: profile.customer.phone }))} deposits={deposits.map((deposit) => ({ ...deposit, customerName: names.get(deposit.customerId) ?? 'Клиент' }))} /></div>;
   } else {
     content = <Card><h2 className="text-lg font-semibold">Инструмент готов к работе</h2><p className="mt-2 text-sm text-ink-soft">{runtime.outcome}</p><Link href={runtime.href} className={btnClass('primary', 'mt-4')}>{runtime.action}</Link></Card>;
   }

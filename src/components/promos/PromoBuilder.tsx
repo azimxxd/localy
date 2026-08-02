@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { createPromo, forecast } from '@/app/(app)/dashboard/promos/actions';
-import { Badge, Button, Card, TextInput } from '@/components/ui/kit';
+import { Badge, Button, Card, DemoNote, TextInput } from '@/components/ui/kit';
 import { kzt, num } from '@/lib/format';
 import {
   PROMO_GOAL_DESCRIPTIONS,
@@ -165,6 +165,7 @@ export default function PromoBuilder({ businessId, segments, valueMeaning, branc
 
       <Card className="space-y-4 self-start lg:sticky lg:top-6">
         <div className="flex items-center justify-between"><h2 className="text-lg font-semibold">Прогноз до запуска</h2>{fcPending ? <Badge tone="muted">Считаем…</Badge> : null}</div>
+        <DemoNote>Охват акции — оценка. Цифры считает модель по вашим данным; факт появится после запуска и применений на кассе.</DemoNote>
         <div className="border border-line p-3"><p className="text-xs uppercase text-ink-soft">{config.audience === 'public' ? 'Оценочный публичный охват' : 'Размер CRM-сегмента'}</p><p className="tnum text-2xl font-semibold text-brand">{num(fc?.estimatedAudience ?? (config.audience === 'segment' ? selectedSegment?.count ?? 0 : 0))}</p><p className="text-xs text-ink-soft">{config.audience === 'public' ? 'Это модель, а не уже известные клиенты.' : selectedSegment?.title}</p></div>
         {fc ? <div className="space-y-3"><Metric label="Новые клиенты" value={num(fc.expectedNewCustomers)} /><Metric label="Повторные визиты" value={num(fc.expectedReturns)} /><Metric label="Ожидаемая выручка" value={kzt(fc.expectedRevenue)} accent /><Metric label="Стоимость предложения" value={kzt(fc.expectedCost)} /><div className="bg-brand-soft px-4 py-3 text-center"><p className="text-xs text-brand-ink">Прогноз ROI</p><p className="tnum text-2xl font-bold text-brand-ink">{fc.roi}×</p></div><p className="text-xs text-ink-soft">Модель считает отклик, средний чек, стоимость скидки/бонуса и валовую маржу. Факт появится после запуска.</p></div> : <p className="text-sm text-ink-soft">Задайте корректные параметры.</p>}
       </Card>

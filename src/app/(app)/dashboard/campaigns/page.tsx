@@ -5,7 +5,7 @@
  */
 
 import CampaignBuilder from '@/components/campaigns/CampaignBuilder';
-import { Badge, Card, EmptyState } from '@/components/ui/kit';
+import { Badge, Card, DemoNote, EmptyState } from '@/components/ui/kit';
 import { getActiveBusiness } from '@/lib/demo';
 import { SEGMENT_META } from '@/lib/engine';
 import { dateShort, num } from '@/lib/format';
@@ -43,6 +43,11 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
         <h1 className="mt-1 text-2xl uppercase tracking-[0.1em] text-ink">Рассылки</h1>
         <p className="mt-1 text-sm text-ink-soft">Выберите аудиторию, проверьте текст и отправьте.</p>
       </header>
+
+      <DemoNote>
+        Рассылка — симуляция. Сегменты, согласия, антиспам, история и воронка считаются по-настоящему,
+        но сообщения не уходят в Telegram, SMS, WhatsApp, email и push.
+      </DemoNote>
 
       <CampaignBuilder
         businessId={business.id}

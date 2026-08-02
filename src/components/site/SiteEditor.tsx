@@ -34,7 +34,7 @@ function Preview({ value, businessCity, loyalty }: { value: SiteEditorInput; bus
       <div className="border-b border-line bg-surface px-4 py-2 text-xs text-ink-soft">● ● ● &nbsp; localy.site/preview</div>
       <div data-site-preview-hero className="relative border-b bg-surface bg-cover bg-center px-7 py-10 text-center" style={{ ...(value.coverUrl ? { backgroundImage: `linear-gradient(rgba(8,12,5,.78),rgba(8,12,5,.9)),url(${value.coverUrl})` } : {}), borderColor: value.primaryColor, boxShadow: `inset 0 5px 0 ${value.primaryColor}` }}>
         <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: heroBrand }}>{theme.label}</p>
-        {value.logoUrl ? <div aria-label="Логотип" className="mx-auto my-5 h-20 w-20 border bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url(${value.logoUrl})`, borderColor: heroBrand }} /> : <pre aria-hidden className="my-5 whitespace-pre font-mono text-sm leading-tight" style={{ color: heroBrand }}>{theme.art.replaceAll('\\n', '\n')}</pre>}
+        {value.logoUrl ? <div aria-label="Логотип" className="mx-auto my-5 h-20 w-20 border bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url(${value.logoUrl})`, borderColor: heroBrand }} /> : <pre aria-hidden className="my-5 overflow-hidden whitespace-pre font-mono text-[0.5rem] leading-tight sm:text-sm" style={{ color: heroBrand }}>{theme.art.replaceAll('\\n', '\n')}</pre>}
         <h2 className="text-3xl font-bold uppercase" style={{ color: heroBrand }}>{value.name || 'Название бизнеса'}</h2>
         <p className={`mt-2 text-sm ${value.coverUrl ? 'text-[#eee7da]' : 'text-ink-soft'}`}>{businessCity}</p>
         <p className={`mx-auto mt-2 max-w-md text-sm ${value.coverUrl ? 'text-[#eee7da]' : 'text-ink-soft'}`}>{value.description || 'Кратко расскажите, почему к вам стоит прийти.'}</p>
@@ -136,7 +136,7 @@ export default function SiteEditor({
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(28rem,0.9fr)]">
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4">
         <Card className="space-y-4">
           <div><h2 className="font-semibold text-ink">Основа сайта</h2><p className="text-sm text-ink-soft">Изменения сразу видны в предпросмотре.</p></div>
           <div className="grid gap-3 md:grid-cols-3">
@@ -201,8 +201,8 @@ export default function SiteEditor({
         </details>
       </div>
 
-      <div className="xl:sticky xl:top-6 xl:self-start">
-        <div className="mb-3 flex items-center justify-between"><div><p className="font-semibold text-ink">Живой предпросмотр</p><Badge tone={value.published ? 'success' : 'muted'}>{value.published ? 'Опубликован' : 'Черновик'}</Badge></div><div className="flex gap-2"><Button type="button" variant="secondary" disabled={pending} onClick={() => save(false)}>Сохранить</Button><Button type="button" disabled={pending} onClick={() => save(true)}>Опубликовать</Button></div></div>
+      <div className="min-w-0 xl:sticky xl:top-6 xl:self-start">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><p className="font-semibold text-ink">Живой предпросмотр</p><Badge tone={value.published ? 'success' : 'muted'}>{value.published ? 'Опубликован' : 'Черновик'}</Badge></div><div className="flex gap-2"><Button type="button" variant="secondary" disabled={pending} onClick={() => save(false)}>Сохранить</Button><Button type="button" disabled={pending} onClick={() => save(true)}>Опубликовать</Button></div></div>
         {message ? <p role="status" className="mb-3 rounded-xl bg-ok-soft px-3 py-2 text-sm text-ok">{message}</p> : null}
         <Preview value={value} businessCity={businessCity} loyalty={loyalty} />
       </div>

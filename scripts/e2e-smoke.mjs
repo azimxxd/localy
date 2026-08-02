@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -11,10 +11,24 @@ const testDataDir = mkdtempSync(join(tmpdir(), 'localy-e2e-'));
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Chrome лежит в разных местах: на Windows — Program Files, на macOS — /Applications. */
+function defaultChromePath() {
+  if (process.platform === 'win32') {
+    const candidates = [
+      join(process.env['PROGRAMFILES'] ?? 'C:\\Program Files', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+      join(process.env['PROGRAMFILES(X86)'] ?? 'C:\\Program Files (x86)', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+      join(process.env['LOCALAPPDATA'] ?? '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    ];
+    return candidates.find((candidate) => existsSync(candidate)) ?? 'chrome.exe';
+  }
+  if (process.platform === 'darwin') return '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+  return 'google-chrome';
+}
+
 async function ensureChrome() {
   try { if ((await fetch(`${CDP}/json/version`)).ok) return; } catch {}
-  const executable = process.env.CHROME_BIN ?? 'google-chrome';
-  browserProcess = spawn(executable, ['--headless=new', '--no-sandbox', '--disable-gpu', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=9222', `--user-data-dir=/tmp/localy-e2e-${process.pid}`, 'about:blank'], { stdio: 'ignore' });
+  const executable = process.env.CHROME_BIN ?? defaultChromePath();
+  browserProcess = spawn(executable, ['--headless=new', '--no-sandbox', '--disable-gpu', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=9222', `--user-data-dir=${join(tmpdir(), `localy-e2e-${process.pid}`)}`, 'about:blank'], { stdio: 'ignore' });
   for (let attempt = 0; attempt < 80; attempt += 1) {
     await sleep(100);
     try { if ((await fetch(`${CDP}/json/version`)).ok) return; } catch {}
@@ -25,7 +39,9 @@ async function ensureChrome() {
 async function ensureApp() {
   try { if ((await fetch(`${APP}/login`)).ok) return; } catch {}
   const port = new URL(APP).port || '3011';
-  appProcess = spawn('./node_modules/.bin/next', ['start', '-p', port], { cwd: process.cwd(), stdio: 'ignore', env: { ...process.env, LOCALY_DATA_FILE: join(testDataDir, 'localy.json'), LOCALY_SESSION_SECRET: 'localy-e2e-session-secret-at-least-32-characters', LOCALY_ALLOW_DEV_OTP: 'true', LOCALY_SECURE_COOKIES: 'false' } });
+  // Запускаем next через node напрямую: shim .bin/next на Windows — это .cmd,
+  // и spawn без shell его не находит.
+  appProcess = spawn(process.execPath, [join('node_modules', 'next', 'dist', 'bin', 'next'), 'start', '-p', port], { cwd: process.cwd(), stdio: 'ignore', env: { ...process.env, LOCALY_DATA_FILE: join(testDataDir, 'localy.json'), LOCALY_SESSION_SECRET: 'localy-e2e-session-secret-at-least-32-characters', LOCALY_ALLOW_DEV_OTP: 'true', LOCALY_SECURE_COOKIES: 'false' } });
   for (let attempt = 0; attempt < 200; attempt += 1) {
     await sleep(100);
     try { if ((await fetch(`${APP}/login`)).ok) return; } catch {}

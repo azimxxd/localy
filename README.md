@@ -23,6 +23,9 @@ npm run dev
 - `cashier@localy.kz` — кассир
 - `platform@localy.kz` — админ Localy
 
+Сценарий показа, список демо-функций и чек-лист перед презентацией — в [docs/DEMO.md](docs/DEMO.md).
+Сброс демо-данных: вход под `platform@localy.kz` → `/admin#demo-reset`.
+
 ## Проверка
 
 ```bash

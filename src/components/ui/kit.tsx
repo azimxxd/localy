@@ -93,6 +93,29 @@ export function Badge({
   );
 }
 
+/**
+ * Единая пометка демо-функции.
+ *
+ * Ставим там, где сценарий работает, но внешнего эффекта нет: рассылки не
+ * уходят, SMS не отправляется, деньги не списываются, охват — модель.
+ * Один вид на всех экранах, чтобы на показе не пришлось оправдываться словами.
+ */
+export function DemoNote({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <p
+      className={cn(
+        'flex flex-wrap items-center gap-2 border border-warn/50 bg-warn-soft px-3 py-2 text-xs text-ink-soft',
+        className,
+      )}
+    >
+      <span className="shrink-0 border border-warn/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-warn">
+        Демо
+      </span>
+      <span className="min-w-0">{children}</span>
+    </p>
+  );
+}
+
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 const BTN_BASE =

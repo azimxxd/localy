@@ -87,7 +87,7 @@ export default function CampaignBuilder({
 
   function sendTest() {
     start(async () => {
-      try { setError(null); const result = await sendCampaignTest({ businessId, channel, body }); setTestSent(`Тест доставлен: ${result.preview}`); }
+      try { setError(null); const result = await sendCampaignTest({ businessId, channel, body }); setTestSent(`Тест сформирован (симуляция, наружу не ушёл): ${result.preview}`); }
       catch (caught) { setError(caught instanceof Error ? caught.message : 'Тест не отправлен'); }
     });
   }

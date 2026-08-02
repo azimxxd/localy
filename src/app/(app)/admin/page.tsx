@@ -18,6 +18,7 @@ import { CATEGORY_LABELS } from '@/lib/tool-labels';
 import { getRepo } from '@/lib/repo';
 import type { ToolCategory } from '@/lib/types';
 import { requireSession } from '@/lib/auth';
+import AdminDemoReset from '@/components/admin/AdminDemoReset';
 import AdminPlatformManager from '@/components/admin/AdminPlatformManager';
 import AdminBusinessTypes from '@/components/admin/AdminBusinessTypes';
 import AdminRecommendationRules from '@/components/admin/AdminRecommendationRules';
@@ -46,6 +47,8 @@ export default async function AdminPage() {
           Аналитика платформы
         </Link>
       </header>
+
+      <AdminDemoReset />
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>

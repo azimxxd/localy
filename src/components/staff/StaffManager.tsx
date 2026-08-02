@@ -3,11 +3,9 @@
 import { useState, useTransition } from 'react';
 import { inviteStaff, updateStaffAccess } from '@/app/(app)/dashboard/staff/actions';
 import { Badge, Button, Card, TextInput } from '@/components/ui/kit';
-import type { Branch, Staff, StaffRole } from '@/lib/types';
+import { USER_ROLE_LABELS, type Branch, type Staff, type StaffRole } from '@/lib/types';
 
-const ROLE_LABELS: Record<StaffRole, string> = {
-  owner: 'Владелец', admin: 'Администратор', marketer: 'Маркетолог', manager: 'Управляющий', cashier: 'Кассир',
-};
+const ROLE_LABELS = USER_ROLE_LABELS;
 
 const MANAGED: StaffRole[] = ['admin', 'marketer', 'manager', 'cashier'];
 
