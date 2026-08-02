@@ -542,6 +542,35 @@ try {
   await waitForText(client, 'Вас пригласил');
   results.push('referral code is issued and attributed by link');
 
+  // Награда обоим: приглашённый регистрируется по ссылке и делает покупку.
+  const invitedPhone = '+7 700 555 21 42';
+  const invitedJoined = await evaluate(client, `(() => { const form = document.querySelector('form'); if (!form) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; const name = form.elements.namedItem('name'); const phone = form.elements.namedItem('phone'); set.call(name, 'Приглашённый E2E'); name.dispatchEvent(new Event('input', { bubbles: true })); set.call(phone, ${JSON.stringify(invitedPhone)}); phone.dispatchEvent(new Event('input', { bubbles: true })); form.requestSubmit(); return true; })()`);
+  if (!invitedJoined) throw new Error('Форма вступления по реферальной ссылке не найдена');
+  await waitForText(client, 'Код отправлен');
+  const invitedVerified = await evaluate(client, `(() => { const code = document.querySelector('[data-dev-code]')?.getAttribute('data-dev-code'); const input = document.querySelector('input[name="verificationCode"]'); if (!code || !input) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(input, code); input.dispatchEvent(new Event('input', { bubbles: true })); input.form?.requestSubmit(); return true; })()`);
+  if (!invitedVerified) throw new Error('Локальный OTP приглашённого не найден');
+  await waitForPath(client, '/me');
+
+  await login(client, 'e2e-cashier@localy.kz', '/pos', 'Localy2026!X');
+  const invitedFound = await evaluate(client, `(() => { const input = document.querySelector('input[placeholder*="QR"]'); if (!input) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(input, ${JSON.stringify(invitedPhone)}); input.dispatchEvent(new Event('input', { bubbles: true })); [...document.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('найти клиента'))?.click(); return true; })()`);
+  if (!invitedFound) throw new Error('Поиск приглашённого в кассе не сработал');
+  await waitForText(client, 'Приглашённый E2E');
+  await evaluate(client, `(() => { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; const amount = document.querySelector('input[placeholder="2400"]'); const items = document.querySelector('input[placeholder*="Капучино"]'); set.call(amount, '4000'); amount.dispatchEvent(new Event('input', { bubbles: true })); set.call(items, 'Стрижка'); items.dispatchEvent(new Event('input', { bubbles: true })); [...document.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('провести'))?.click(); })()`);
+  await waitForText(client, 'Покупка проведена');
+
+  await login(client, 'owner@localy.kz', '/dashboard');
+  await navigate(client, crmCustomerHref);
+  const referrerCard = await evaluate(client, 'document.body.innerText');
+  const rewarded = /награда начислена\s*1/i.exec(referrerCard);
+  if (!rewarded) throw new Error(`Реферальная награда не начислена пригласившему: ${referrerCard.slice(0, 400)}`);
+  const invitedCardHref = await evaluate(client, `(() => { const link = [...document.querySelectorAll('a[href^="/dashboard/crm/"]')].find((node) => node.innerText.includes('Приглашённый E2E')); return link?.getAttribute('href') ?? null; })()`);
+  await navigate(client, '/dashboard/crm');
+  const invitedHref = invitedCardHref ?? await evaluate(client, `(() => { const row = [...document.querySelectorAll('a[href^="/dashboard/crm/"]')].find((node) => node.innerText.includes('Приглашённый E2E')); return row?.getAttribute('href') ?? null; })()`);
+  if (!invitedHref) throw new Error('Карточка приглашённого не найдена в CRM');
+  await navigate(client, invitedHref);
+  await waitForText(client, 'награда начислена обоим');
+  results.push('referral reward paid to both after first purchase');
+
   // ── Мобильные экраны: горизонтального скролла быть не должно ──
   await client.send('Emulation.setDeviceMetricsOverride', { width: 375, height: 812, deviceScaleFactor: 1, mobile: true });
   const mobilePaths = ['/', '/onboarding', '/dashboard', '/dashboard/site', '/dashboard/crm', '/dashboard/promos', '/dashboard/bookings', '/pos', bookingPath];
