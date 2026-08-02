@@ -10,7 +10,10 @@
 
 import type {
   ActivityLogEntry,
+  AutomationRun,
   Booking,
+  BookingSchedule,
+  BookingSlot,
   Branch,
   Business,
   BusinessStats,
@@ -24,6 +27,7 @@ import type {
   GrowthPlan,
   LoyaltyConfig,
   Membership,
+  MessageDelivery,
   NotificationChannel,
   PlatformStats,
   Plan,
@@ -32,6 +36,7 @@ import type {
   PromoFunnel,
   PromoStage,
   RecommendationRuleSetting,
+  Referral,
   Segment,
   SegmentCode,
   SiteConfig,
@@ -276,6 +281,29 @@ export interface Repo {
   listBookings(businessId: string): Promise<Booking[]>;
   createBooking(input: Omit<Booking, 'id' | 'status'>): Promise<Booking>;
   updateBooking(id: string, patch: Partial<Booking>): Promise<Booking>;
+  /** Перенос на другое время. Свободность слота проверяется здесь же. */
+  rescheduleBooking(id: string, at: string): Promise<Booking>;
+  cancelBooking(id: string, reason: string): Promise<Booking>;
+  getBookingSchedule(businessId: string): Promise<BookingSchedule>;
+  updateBookingSchedule(businessId: string, patch: Partial<Omit<BookingSchedule, 'businessId'>>): Promise<BookingSchedule>;
+  /** Свободные слоты на горизонт расписания. Занятость считается по записям. */
+  listBookingSlots(businessId: string, options?: { days?: number; excludeBookingId?: string }): Promise<BookingSlot[]>;
+
+  // ── Рефералы ──
+  /** Стабильный код приглашения клиента. Ссылка: /join/<slug>?ref=<код>. */
+  getReferralCode(customerId: string): Promise<string>;
+  findCustomerByReferralCode(code: string): Promise<Customer | null>;
+  /** Фиксирует, кто кого привёл. Награда начисляется после первой покупки. */
+  registerReferral(input: { businessId: string; referrerId: string; invitedId: string; code: string }): Promise<Referral | null>;
+  listReferrals(businessId: string, customerId?: string): Promise<Referral[]>;
+
+  // ── Журнал доставки ──
+  listMessageDeliveries(businessId: string, campaignId?: string): Promise<MessageDelivery[]>;
+
+  // ── Фоновые сценарии ──
+  /** Запускает акции по расписанию, закрывает просроченные, шлёт birthday-сценарии. */
+  runAutomations(): Promise<AutomationRun[]>;
+  listAutomationRuns(limit?: number): Promise<AutomationRun[]>;
   listDeposits(businessId: string, customerId?: string): Promise<Deposit[]>;
   createDeposit(input: Omit<Deposit, 'id'>): Promise<Deposit>;
   adjustDeposit(id: string, delta: number): Promise<Deposit>;

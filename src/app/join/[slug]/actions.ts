@@ -22,6 +22,7 @@ export async function registerAndJoin(
   const phone = String(formData.get('phone') ?? '').trim();
   const birthday = String(formData.get('birthday') ?? '').trim() || null;
   const consent = formData.get('consent') === 'on';
+  const referralCode = String(formData.get('ref') ?? '').trim().toUpperCase();
   const verificationCode = String(formData.get('verificationCode') ?? '').trim();
   const digits = normalizePhone(phone).slice(1);
   if (name.length < 2 || digits.length < 10) {
@@ -60,6 +61,18 @@ export async function registerAndJoin(
   const isNew = !customer;
   if (!customer) customer = await repo.createCustomer({ name, phone: normalizedPhone, birthday });
   const existingMembership = await repo.getMembership(business.id, customer.id);
+
+  // Реферала фиксируем ДО joinBusiness: после него человек уже участник
+  // заведения, и приглашение засчитывать нечестно.
+  if (referralCode) {
+    const referrer = await repo.findCustomerByReferralCode(referralCode);
+    if (referrer && referrer.id !== customer.id) {
+      await repo
+        .registerReferral({ businessId: business.id, referrerId: referrer.id, invitedId: customer.id, code: referralCode })
+        .catch(() => null);
+    }
+  }
+
   await repo.joinBusiness(business.id, customer.id);
   await repo.updateConsent(
     business.id,

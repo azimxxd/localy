@@ -18,6 +18,7 @@ import { CATEGORY_LABELS } from '@/lib/tool-labels';
 import { getRepo } from '@/lib/repo';
 import type { ToolCategory } from '@/lib/types';
 import { requireSession } from '@/lib/auth';
+import AdminAutomations from '@/components/admin/AdminAutomations';
 import AdminDemoReset from '@/components/admin/AdminDemoReset';
 import AdminPlatformManager from '@/components/admin/AdminPlatformManager';
 import AdminBusinessTypes from '@/components/admin/AdminBusinessTypes';
@@ -26,7 +27,7 @@ import AdminRecommendationRules from '@/components/admin/AdminRecommendationRule
 export default async function AdminPage() {
   await requireSession(['platform_admin']);
   const repo = await getRepo();
-  const [tools, templates, businessTypes, businesses, users, plans, recommendationSettings] = await Promise.all([
+  const [tools, templates, businessTypes, businesses, users, plans, recommendationSettings, automationRuns] = await Promise.all([
     repo.listTools(),
     repo.listTemplates(),
     repo.listBusinessTypes(),
@@ -34,6 +35,7 @@ export default async function AdminPage() {
     repo.listUsers(),
     repo.listPlans(),
     repo.listRecommendationSettings(),
+    repo.listAutomationRuns(10),
   ]);
 
   return (
@@ -49,6 +51,8 @@ export default async function AdminPage() {
       </header>
 
       <AdminDemoReset />
+
+      <AdminAutomations runs={automationRuns} />
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>

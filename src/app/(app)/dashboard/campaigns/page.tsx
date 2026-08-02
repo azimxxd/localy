@@ -5,6 +5,7 @@
  */
 
 import CampaignBuilder from '@/components/campaigns/CampaignBuilder';
+import DeliveryLog from '@/components/campaigns/DeliveryLog';
 import { Badge, Card, DemoNote, EmptyState } from '@/components/ui/kit';
 import { getActiveBusiness } from '@/lib/demo';
 import { SEGMENT_META } from '@/lib/engine';
@@ -27,12 +28,14 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
   const repo = await getRepo();
   const business = await getActiveBusiness();
 
-  const [campaigns, segments, promos, profiles] = await Promise.all([
+  const [campaigns, segments, promos, profiles, deliveries] = await Promise.all([
     repo.listCampaigns(business.id),
     repo.listSegments(business.id),
     repo.listPromos(business.id),
     repo.listCustomerProfiles(business.id),
+    repo.listMessageDeliveries(business.id),
   ]);
+  const customerNames = new Map(profiles.map((profile) => [profile.customer.id, profile.customer.name]));
   const channels: NotificationChannel[] = ['telegram', 'email', 'sms', 'whatsapp', 'push'];
   const recentByCustomer = Object.fromEntries(await Promise.all(profiles.map(async (profile) => [profile.customer.id, await repo.countRecentCampaigns(business.id, profile.customer.id)] as const)));
 
@@ -84,6 +87,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
                 </div>
                 <p className="mt-1 truncate text-sm text-ink">{c.body}</p>
                 {c.sentAt ? <p className="mt-1 text-xs text-ink-soft">{num(c.audienceSize)} получили → {num(c.opened ?? 0)} открыли → {num(c.clicked ?? 0)} перешли → {num(c.visited ?? 0)} вернулись{c.promoId ? ` → ${num(c.redeemed ?? 0)} использовали` : ''}</p> : null}
+                <DeliveryLog rows={deliveries.filter((item) => item.campaignId === c.id)} names={customerNames} />
               </div>
               <div className="shrink-0 text-right text-xs text-ink-soft">
                 <p className="tnum text-ink">{num(c.audienceSize)}</p>

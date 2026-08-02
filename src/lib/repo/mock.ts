@@ -36,8 +36,13 @@ import {
   QR_ROTATION_SECONDS,
   REDEEM_CONFIRM_THRESHOLD,
   MAX_CAMPAIGNS_PER_MONTH,
+  REFERRAL_REWARD_POINTS,
+  BIRTHDAY_COOLDOWN_DAYS,
   type ActivityLogEntry,
+  type AutomationRun,
   type Booking,
+  type BookingSchedule,
+  type BookingSlot,
   type Branch,
   type Business,
   type BusinessStats,
@@ -48,6 +53,7 @@ import {
   type Deposit,
   type LoyaltyConfig,
   type Membership,
+  type MessageDelivery,
   type NotificationChannel,
   type PlatformStats,
   type Plan,
@@ -55,6 +61,7 @@ import {
   type PromoEvent,
   type PromoFunnel,
   type PromoStage,
+  type Referral,
   type Segment,
   type SegmentCode,
   type Staff,
@@ -190,6 +197,154 @@ function planOf(businessId: string): Plan {
   const plan = state().plans.find((item) => item.tier === (business?.plan ?? 'free'));
   if (!plan) throw new Error('Тариф бизнеса не настроен');
   return plan;
+}
+
+const DEFAULT_SCHEDULE: Omit<BookingSchedule, 'businessId'> = {
+  weekdays: [1, 2, 3, 4, 5, 6],
+  openTime: '10:00',
+  closeTime: '20:00',
+  slotMinutes: 60,
+  capacity: 2,
+  leadHours: 2,
+  horizonDays: 14,
+};
+
+function scheduleOf(businessId: string): BookingSchedule {
+  const found = state().bookingSchedules?.find((item) => item.businessId === businessId);
+  return found ?? { businessId, ...DEFAULT_SCHEDULE };
+}
+
+function minutesOf(time: string): number {
+  const [hours, minutes] = time.split(':').map(Number);
+  return (Number.isFinite(hours) ? hours : 0) * 60 + (Number.isFinite(minutes) ? minutes : 0);
+}
+
+/**
+ * Слоты не хранятся: считаем сетку из расписания и вычитаем занятые записи.
+ * Так перенос и повторная запись всегда видят одну и ту же картину.
+ */
+function computeSlots(businessId: string, options?: { days?: number; excludeBookingId?: string }): BookingSlot[] {
+  const schedule = scheduleOf(businessId);
+  const days = Math.max(1, Math.min(60, options?.days ?? schedule.horizonDays));
+  const step = Math.max(15, schedule.slotMinutes);
+  const open = minutesOf(schedule.openTime);
+  const close = minutesOf(schedule.closeTime);
+  if (close <= open) return [];
+
+  const active = state().bookings.filter(
+    (booking) =>
+      booking.businessId === businessId &&
+      booking.kind !== 'lead' &&
+      booking.status !== 'cancelled' &&
+      booking.id !== options?.excludeBookingId,
+  );
+  const taken = new Map<string, number>();
+  active.forEach((booking) => taken.set(booking.at, (taken.get(booking.at) ?? 0) + 1));
+
+  const earliest = Date.now() + schedule.leadHours * 3_600_000;
+  const slots: BookingSlot[] = [];
+  const day = new Date();
+  day.setHours(0, 0, 0, 0);
+
+  for (let offset = 0; offset < days; offset += 1) {
+    const current = new Date(day.getTime() + offset * 86_400_000);
+    if (!schedule.weekdays.includes(current.getDay())) continue;
+    for (let minute = open; minute + step <= close; minute += step) {
+      const at = new Date(current.getTime() + minute * 60_000);
+      if (at.getTime() < earliest) continue;
+      const iso = at.toISOString();
+      slots.push({ at: iso, capacity: schedule.capacity, taken: taken.get(iso) ?? 0 });
+    }
+  }
+  return slots;
+}
+
+/** Код приглашения — детерминированный, чтобы ссылка клиента не менялась. */
+function referralCodeFor(customerId: string): string {
+  let hash = 2_166_136_261;
+  for (let index = 0; index < customerId.length; index += 1) {
+    hash ^= customerId.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (hash >>> 0).toString(36).toUpperCase().padStart(6, '0').slice(0, 6);
+}
+
+/** Начисляет награду обоим после первой покупки приглашённого. */
+function settleReferral(businessId: string, invitedId: string, at: string) {
+  const s = state();
+  const referral = (s.referrals ?? []).find(
+    (item) => item.businessId === businessId && item.invitedId === invitedId && !item.rewardedAt,
+  );
+  if (!referral) return;
+  const award = (customerId: string) => {
+    const membership = s.memberships.find((item) => item.businessId === businessId && item.customerId === customerId);
+    if (membership) membership.points += referral.rewardPoints;
+  };
+  award(referral.referrerId);
+  award(referral.invitedId);
+  referral.rewardedAt = at;
+  const referrer = s.customers.find((item) => item.id === referral.referrerId);
+  const invited = s.customers.find((item) => item.id === referral.invitedId);
+  logAction(businessId, 'referral_rewarded', `Реферальная награда: ${referrer?.name ?? 'клиент'} привёл ${invited?.name ?? 'клиента'}`, {
+    referralId: referral.id,
+    points: referral.rewardPoints,
+  });
+}
+
+/**
+ * Журнал доставки для отправленной рассылки.
+ *
+ * Статусы получателей симулируются теми же долями, что и воронка. Исключённые
+ * клиенты попадают в журнал со статусом skipped и НАСТОЯЩЕЙ причиной: без неё
+ * владелец не понимает, почему аудитория меньше сегмента.
+ */
+function writeDeliveries(campaign: Campaign) {
+  const s = state();
+  s.messageDeliveries = s.messageDeliveries ?? [];
+  const at = campaign.sentAt ?? nowIso();
+  const recipients = campaign.recipientIds ?? [];
+  const push = (customerId: string, status: MessageDelivery['status'], reason?: string) => {
+    s.messageDeliveries!.push({
+      id: uid('msg'),
+      businessId: campaign.businessId,
+      campaignId: campaign.id,
+      customerId,
+      channel: campaign.channel,
+      status,
+      reason,
+      at,
+      simulated: true,
+    });
+  };
+
+  const clicked = Math.round(recipients.length * 0.42);
+  const opened = Math.round(recipients.length * 0.63);
+  const failed = Math.round(recipients.length * 0.03);
+  recipients.forEach((customerId, index) => {
+    if (index < clicked) push(customerId, 'clicked');
+    else if (index < opened) push(customerId, 'opened');
+    else if (index >= recipients.length - failed) push(customerId, 'failed', 'Канал недоступен у клиента');
+    else push(customerId, 'delivered');
+  });
+
+  const segment = segmentsOf(campaign.businessId).find((item) => item.code === campaign.audienceSegment);
+  const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  (segment?.customerIds ?? [])
+    .filter((customerId) => !recipients.includes(customerId))
+    .forEach((customerId) => {
+      const membership = s.memberships.find(
+        (item) => item.businessId === campaign.businessId && item.customerId === customerId,
+      );
+      const recent = s.campaigns.filter(
+        (item) => item.businessId === campaign.businessId && item.id !== campaign.id && Boolean(item.sentAt) && item.sentAt! >= since && item.recipientIds?.includes(customerId),
+      ).length;
+      const reason = !membership?.consentChannels.includes(campaign.channel)
+        ? 'Нет согласия на этот канал'
+        : recent >= MAX_CAMPAIGNS_PER_MONTH
+          ? 'Достигнут лимит частоты сообщений'
+          : 'Исключён фильтром аудитории';
+      push(customerId, 'skipped', reason);
+    });
 }
 
 function assertPlanLimit(businessId: string, key: keyof Plan['limits'], current: number, noun: string) {
@@ -1009,6 +1164,7 @@ export function createMockRepo(options: StateRepoOptions = {}): Repo {
           amount: input.amount,
         });
         emitTransaction(transaction);
+        settleReferral(input.businessId, customer.id, transaction.createdAt);
         if (promo) {
           const at = transaction.createdAt;
           if (!s.promoEvents.some((event) => event.promoId === promo.id && event.customerId === customer.id && event.stage === 'visited')) s.promoEvents.push({ promoId: promo.id, customerId: customer.id, stage: 'visited', at });
@@ -1312,6 +1468,8 @@ export function createMockRepo(options: StateRepoOptions = {}): Repo {
         });
       }
 
+      writeDeliveries(campaign);
+
       logAction(
         campaign.businessId,
         'campaign_sent',
@@ -1420,7 +1578,19 @@ export function createMockRepo(options: StateRepoOptions = {}): Repo {
     },
 
     async createBooking(input) {
-      const booking: Booking = { ...input, id: uid('bkg'), status: 'pending' };
+      const schedule = scheduleOf(input.businessId);
+      if (input.kind !== 'lead') {
+        const slot = computeSlots(input.businessId).find((item) => item.at === input.at);
+        if (!slot) throw new Error('Это время вне расписания записи');
+        if (slot.taken >= slot.capacity) throw new Error('Слот уже занят. Выберите другое время');
+      }
+      const booking: Booking = {
+        ...input,
+        durationMinutes: input.durationMinutes ?? (input.kind === 'lead' ? undefined : schedule.slotMinutes),
+        createdAt: input.createdAt ?? nowIso(),
+        id: uid('bkg'),
+        status: 'pending',
+      };
       state().bookings.push(booking);
       logAction(input.businessId, 'booking_created', `Новая запись: ${input.service}`, {
         customerId: input.customerId,
@@ -1434,6 +1604,171 @@ export function createMockRepo(options: StateRepoOptions = {}): Repo {
       Object.assign(b, patch, { id });
       logAction(b.businessId, 'booking_updated', `Статус записи изменён: ${b.service}`, { bookingId: id, status: b.status });
       return clone(b);
+    },
+
+    async rescheduleBooking(id, at) {
+      const booking = state().bookings.find((item) => item.id === id);
+      if (!booking) throw new Error(`Запись ${id} не найдена`);
+      if (booking.status === 'cancelled') throw new Error('Отменённую запись нельзя перенести');
+      if (booking.status === 'done') throw new Error('Выполненную запись нельзя перенести');
+      const slot = computeSlots(booking.businessId, { excludeBookingId: id }).find((item) => item.at === at);
+      if (!slot) throw new Error('Это время вне расписания записи');
+      if (slot.taken >= slot.capacity) throw new Error('Слот уже занят. Выберите другое время');
+      booking.rescheduledFrom = booking.at;
+      booking.at = at;
+      booking.status = 'confirmed';
+      logAction(booking.businessId, 'booking_rescheduled', `Запись перенесена: ${booking.service}`, { bookingId: id, from: booking.rescheduledFrom, to: at });
+      return clone(booking);
+    },
+
+    async cancelBooking(id, reason) {
+      const booking = state().bookings.find((item) => item.id === id);
+      if (!booking) throw new Error(`Запись ${id} не найдена`);
+      if (booking.status === 'cancelled') throw new Error('Запись уже отменена');
+      if (booking.status === 'done') throw new Error('Выполненную запись нельзя отменить');
+      const text = reason.trim();
+      if (text.length < 3) throw new Error('Укажите причину отмены');
+      booking.status = 'cancelled';
+      booking.cancelReason = text;
+      logAction(booking.businessId, 'booking_cancelled', `Запись отменена: ${booking.service} — ${text}`, { bookingId: id });
+      return clone(booking);
+    },
+
+    async getBookingSchedule(businessId) {
+      return clone(scheduleOf(businessId));
+    },
+
+    async updateBookingSchedule(businessId, patch) {
+      const s = state();
+      s.bookingSchedules = s.bookingSchedules ?? [];
+      const current = scheduleOf(businessId);
+      const next: BookingSchedule = { ...current, ...patch, businessId };
+      if (next.weekdays.length === 0) throw new Error('Выберите хотя бы один рабочий день');
+      if (minutesOf(next.closeTime) - minutesOf(next.openTime) < next.slotMinutes) {
+        throw new Error('Рабочий день короче одного слота');
+      }
+      if (next.slotMinutes < 15 || next.slotMinutes > 240) throw new Error('Слот должен быть от 15 до 240 минут');
+      if (next.capacity < 1 || next.capacity > 50) throw new Error('Вместимость слота — от 1 до 50');
+      if (next.horizonDays < 1 || next.horizonDays > 60) throw new Error('Горизонт записи — от 1 до 60 дней');
+      if (next.leadHours < 0 || next.leadHours > 72) throw new Error('Буфер до ближайшей записи — от 0 до 72 часов');
+      const index = s.bookingSchedules.findIndex((item) => item.businessId === businessId);
+      if (index >= 0) s.bookingSchedules[index] = next; else s.bookingSchedules.push(next);
+      logAction(businessId, 'booking_schedule_updated', 'Расписание записи обновлено', { slotMinutes: next.slotMinutes, capacity: next.capacity });
+      return clone(next);
+    },
+
+    async listBookingSlots(businessId, options) {
+      return clone(computeSlots(businessId, options));
+    },
+
+    // ── Рефералы ──
+    async getReferralCode(customerId) {
+      return referralCodeFor(customerId);
+    },
+
+    async findCustomerByReferralCode(code) {
+      const normalized = code.trim().toUpperCase();
+      const found = state().customers.find((customer) => referralCodeFor(customer.id) === normalized);
+      return found ? clone(found) : null;
+    },
+
+    async registerReferral(input) {
+      const s = state();
+      s.referrals = s.referrals ?? [];
+      if (input.referrerId === input.invitedId) throw new Error('Нельзя пригласить самого себя');
+      const alreadyMember = s.memberships.some(
+        (item) => item.businessId === input.businessId && item.customerId === input.invitedId,
+      );
+      const existing = s.referrals.find(
+        (item) => item.businessId === input.businessId && item.invitedId === input.invitedId,
+      );
+      // Приглашение засчитываем только новому для этого бизнеса человеку и один раз.
+      if (existing || alreadyMember) return null;
+      const referral: Referral = {
+        id: uid('ref'),
+        businessId: input.businessId,
+        referrerId: input.referrerId,
+        invitedId: input.invitedId,
+        code: input.code.trim().toUpperCase(),
+        createdAt: nowIso(),
+        rewardedAt: null,
+        rewardPoints: REFERRAL_REWARD_POINTS,
+      };
+      s.referrals.push(referral);
+      logAction(input.businessId, 'referral_registered', 'Клиент пришёл по реферальной ссылке', {
+        referralId: referral.id,
+        referrerId: referral.referrerId,
+      });
+      return clone(referral);
+    },
+
+    async listReferrals(businessId, customerId) {
+      return clone(
+        (state().referrals ?? []).filter(
+          (item) => item.businessId === businessId && (!customerId || item.referrerId === customerId || item.invitedId === customerId),
+        ),
+      );
+    },
+
+    // ── Журнал доставки ──
+    async listMessageDeliveries(businessId, campaignId) {
+      return clone(
+        (state().messageDeliveries ?? [])
+          .filter((item) => item.businessId === businessId && (!campaignId || item.campaignId === campaignId))
+          .sort((a, b) => b.at.localeCompare(a.at)),
+      );
+    },
+
+    // ── Фоновые сценарии ──
+    async runAutomations() {
+      const s = state();
+      s.automationRuns = s.automationRuns ?? [];
+      const at = nowIso();
+      const runs: AutomationRun[] = [];
+      const record = (businessId: string | null, kind: AutomationRun['kind'], detail: string) => {
+        const run: AutomationRun = { id: uid('run'), businessId, kind, detail, at };
+        s.automationRuns!.unshift(run);
+        runs.push(run);
+      };
+
+      s.promos.forEach((promo) => {
+        if (promo.status === 'scheduled' && promo.startsAt <= at) {
+          promo.status = 'active';
+          logAction(promo.businessId, 'promo_launched', `Акция «${promo.title}» запущена по расписанию`, { promoId: promo.id, automated: true });
+          record(promo.businessId, 'promo_launch', `Акция «${promo.title}» запущена по расписанию`);
+        } else if ((promo.status === 'active' || promo.status === 'scheduled') && promo.endsAt < at) {
+          promo.status = 'finished';
+          logAction(promo.businessId, 'promo_finished', `Акция «${promo.title}» завершена`, { promoId: promo.id, automated: true });
+          record(promo.businessId, 'promo_finish', `Акция «${promo.title}» завершена по сроку`);
+        }
+      });
+
+      for (const business of s.businesses) {
+        if (business.active === false) continue;
+        const recent = s.automationRuns.find(
+          (run) => run.businessId === business.id && run.kind === 'birthday' && run.at >= new Date(Date.now() - BIRTHDAY_COOLDOWN_DAYS * 86_400_000).toISOString(),
+        );
+        if (recent) continue;
+        const segment = segmentsOf(business.id).find((item) => item.code === 'birthday_soon');
+        if (!segment || segment.count === 0) continue;
+        const campaign = await repo.createCampaign({
+          businessId: business.id,
+          promoId: null,
+          channel: 'telegram',
+          audienceSegment: 'birthday_soon',
+          body: `{name}, у вас скоро день рождения. Заходите к нам за подарком — ${business.name}.`,
+        }).catch(() => null);
+        if (!campaign) continue;
+        const sent = await repo.simulateSend(campaign.id);
+        record(business.id, 'birthday', `Поздравления отправлены: ${sent.audienceSize} клиентов (симуляция)`);
+      }
+
+      s.automationRuns = s.automationRuns.slice(0, 200);
+      return clone(runs);
+    },
+
+    async listAutomationRuns(limit = 30) {
+      return clone((state().automationRuns ?? []).slice(0, limit));
     },
 
     async listDeposits(businessId, customerId?) {
@@ -1520,6 +1855,11 @@ export function createMockRepo(options: StateRepoOptions = {}): Repo {
     'simulateSend',
     'createBooking',
     'updateBooking',
+    'rescheduleBooking',
+    'cancelBooking',
+    'updateBookingSchedule',
+    'registerReferral',
+    'runAutomations',
     'createDeposit',
     'adjustDeposit',
   ]);

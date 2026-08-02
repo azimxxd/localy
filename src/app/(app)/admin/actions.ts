@@ -78,6 +78,15 @@ export async function updatePlanAction(tier: Plan['tier'], patch: { priceKzt: nu
   revalidatePath('/dashboard/subscription');
 }
 
+/** Ручной прогон фоновых сценариев — та же логика, что у /api/cron/run. */
+export async function runAutomationsAction(): Promise<{ detail: string }[]> {
+  await requireSession(['platform_admin']);
+  const runs = await (await getRepo()).runAutomations();
+  revalidatePath('/admin');
+  revalidatePath('/dashboard');
+  return runs.map((run) => ({ detail: run.detail }));
+}
+
 export async function resetDemoAction(): Promise<void> {
   await requireSession(['platform_admin']);
   await (await getRepo()).resetDemoData();

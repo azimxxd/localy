@@ -30,14 +30,19 @@ export default async function CustomerCardPage({
   if (!profile) {
     return <EmptyState title="Клиент не найден" hint="Возможно, он не состоит в этом заведении" />;
   }
-  const [history, branches, staff, promos] = await Promise.all([
+  const [history, branches, staff, promos, referrals, referralCode] = await Promise.all([
     repo.listTransactionsForCustomer(business.id, customerId),
     repo.listBranches(business.id),
     repo.listStaff(business.id),
     repo.listPromos(business.id),
+    repo.listReferrals(business.id, customerId),
+    repo.getReferralCode(customerId),
   ]);
 
   const { customer, membership } = profile;
+  const invited = referrals.filter((item) => item.referrerId === customerId);
+  const invitedBy = referrals.find((item) => item.invitedId === customerId);
+  const invitedByCustomer = invitedBy ? await repo.getCustomer(invitedBy.referrerId) : null;
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -55,6 +60,20 @@ export default async function CustomerCardPage({
           <Badge tone={ACTIVITY_TONE[profile.activity]}>{ACTIVITY_LABELS[profile.activity]}</Badge>
         </div>
       </header>
+
+      <Card className="space-y-1">
+        <p className="ascii-kicker">Рефералы</p>
+        <p className="text-sm text-ink">
+          Код приглашения — <strong className="tnum">{referralCode}</strong>. Привёл клиентов: {invited.length}
+          {invited.length > 0 ? ` · награда начислена ${invited.filter((item) => item.rewardedAt).length}` : ''}
+        </p>
+        {invitedByCustomer ? (
+          <p className="text-sm text-ink-soft">
+            Пришёл по приглашению: {invitedByCustomer.name}
+            {invitedBy?.rewardedAt ? ' · награда начислена обоим' : ' · награда после первой покупки'}
+          </p>
+        ) : null}
+      </Card>
 
       <Card>
         <p className="text-ink">{explainActivity(profile)}</p>

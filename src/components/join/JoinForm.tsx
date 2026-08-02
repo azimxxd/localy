@@ -4,12 +4,13 @@ import { useActionState } from 'react';
 import { registerAndJoin } from '@/app/join/[slug]/actions';
 import { Button, DemoNote, TextInput } from '@/components/ui/kit';
 
-export default function JoinForm({ slug }: { slug: string }) {
+export default function JoinForm({ slug, referralCode }: { slug: string; referralCode?: string }) {
   const action = registerAndJoin.bind(null, slug);
   const [state, formAction, pending] = useActionState(action, {});
   const values = state.values;
   return (
     <form action={formAction} className="space-y-3">
+      {referralCode ? <input type="hidden" name="ref" value={referralCode} /> : null}
       {state.verificationRequired && values ? (
         <>
           <input type="hidden" name="name" value={values.name} />

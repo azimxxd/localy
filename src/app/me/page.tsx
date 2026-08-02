@@ -41,6 +41,7 @@ export default async function MePage() {
   }
 
   const memberships = await repo.listMembershipsForCustomer(customer.id);
+  const referralCode = await repo.getReferralCode(customer.id);
   const cards = await Promise.all(
     memberships.map(async ({ business, membership }) => {
       const [loyalty, transactions] = await Promise.all([
@@ -76,6 +77,25 @@ export default async function MePage() {
           redeemPoints={transaction.redeemedPoints ?? 0}
         />
       ))) : null}
+
+      {cards.length > 0 ? (
+        <Card className="space-y-2 p-4">
+          <p className="ascii-kicker">Приведите друга</p>
+          <p className="text-sm text-ink-soft">
+            Ваш код приглашения — <strong className="tnum text-ink">{referralCode}</strong>. После первой покупки друга
+            бонусы получите оба.
+          </p>
+          <ul className="space-y-1 text-sm">
+            {cards.map(({ business }) => (
+              <li key={business.id} className="truncate">
+                <Link className="text-brand hover:underline" href={`/join/${business.slug}?ref=${referralCode}`}>
+                  Ссылка для «{business.name}»
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-soft">

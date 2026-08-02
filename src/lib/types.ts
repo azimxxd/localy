@@ -620,6 +620,80 @@ export interface Booking {
   kind?: 'booking' | 'lead';
   note?: string;
   status: BookingStatus;
+  /** Длительность визита в минутах — из расписания на момент записи. */
+  durationMinutes?: number;
+  /** Прошлое время записи, если её переносили. */
+  rescheduledFrom?: string;
+  cancelReason?: string;
+  createdAt?: string;
+}
+
+/**
+ * Расписание онлайн-записи. Слоты не хранятся: их считает
+ * listBookingSlots из расписания и уже занятых записей.
+ */
+export interface BookingSchedule {
+  businessId: string;
+  /** Рабочие дни недели: 0 — воскресенье, 6 — суббота. */
+  weekdays: number[];
+  /** «10:00» */
+  openTime: string;
+  /** «20:00» */
+  closeTime: string;
+  slotMinutes: number;
+  /** Сколько клиентов бизнес принимает одновременно. */
+  capacity: number;
+  /** Ближайшая запись — не раньше чем через столько часов. */
+  leadHours: number;
+  /** На сколько дней вперёд открыта запись. */
+  horizonDays: number;
+}
+
+export interface BookingSlot {
+  at: string;
+  capacity: number;
+  taken: number;
+}
+
+/** Кто кого привёл. Награда начисляется обоим после первой покупки приглашённого. */
+export interface Referral {
+  id: string;
+  businessId: string;
+  referrerId: string;
+  invitedId: string;
+  code: string;
+  createdAt: string;
+  rewardedAt: string | null;
+  rewardPoints: number;
+}
+
+export type MessageStatus = 'queued' | 'sent' | 'delivered' | 'opened' | 'clicked' | 'failed' | 'skipped';
+
+/**
+ * Журнал доставки. Реальной отправки в MVP нет — статусы симулируются,
+ * но причины исключения (нет согласия, лимит частоты) настоящие.
+ */
+export interface MessageDelivery {
+  id: string;
+  businessId: string;
+  campaignId: string;
+  customerId: string;
+  channel: NotificationChannel;
+  status: MessageStatus;
+  reason?: string;
+  at: string;
+  simulated: boolean;
+}
+
+export type AutomationKind = 'promo_launch' | 'promo_finish' | 'birthday';
+
+/** Что сделал фоновый обработчик. Показывается в админке платформы. */
+export interface AutomationRun {
+  id: string;
+  businessId: string | null;
+  kind: AutomationKind;
+  detail: string;
+  at: string;
 }
 
 /**
@@ -673,6 +747,12 @@ export const REDEEM_CONFIRM_THRESHOLD = 1000;
 
 /** Антиспам: максимум рассылок на одного клиента за 30 дней. */
 export const MAX_CAMPAIGNS_PER_MONTH = 4;
+
+/** Бонусы обоим участникам реферальной программы после первой покупки приглашённого. */
+export const REFERRAL_REWARD_POINTS = 500;
+
+/** Как часто бизнес может слать автоматические поздравления одному сегменту. */
+export const BIRTHDAY_COOLDOWN_DAYS = 7;
 
 /** Человеческие названия ролей. В интерфейсе не показываем коды вроде `marketer`. */
 export const USER_ROLE_LABELS: Record<UserRole, string> = {

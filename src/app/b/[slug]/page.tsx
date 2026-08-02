@@ -73,11 +73,12 @@ export default async function BusinessSitePage({
   const business = await repo.getBusinessBySlug(slug);
   if (!business || business.active === false) notFound();
 
-  const [loyalty, promos, site, branches] = await Promise.all([
+  const [loyalty, promos, site, branches, slots] = await Promise.all([
     repo.getLoyaltyConfig(business.id),
     repo.listPromos(business.id),
     repo.getSiteConfig(business.id),
     repo.listBranches(business.id),
+    repo.listBookingSlots(business.id),
   ]);
 
   if (!site?.published) notFound();
@@ -182,7 +183,7 @@ export default async function BusinessSitePage({
           </section>
         ) : null}
 
-        {bookingEnabled ? <section id="booking" className="scroll-mt-4 space-y-2"><h2 className="font-semibold uppercase text-brand">Онлайн-запись</h2><PublicBookingForm slug={business.slug} services={services.length ? services : ['Консультация']} /></section> : null}
+        {bookingEnabled ? <section id="booking" className="scroll-mt-4 space-y-2"><h2 className="font-semibold uppercase text-brand">Онлайн-запись</h2><PublicBookingForm slug={business.slug} services={services.length ? services : ['Консультация']} slots={slots.filter((slot) => slot.taken < slot.capacity).slice(0, 60).map((slot) => ({ at: slot.at, free: slot.capacity - slot.taken }))} /></section> : null}
         {leadEnabled ? <section id="lead" className="scroll-mt-16 space-y-2"><h2 className="font-semibold uppercase text-brand">Оставить заявку</h2><PublicLeadForm slug={business.slug} /></section> : null}
 
         {site?.workHours || site?.phone || socialTokens.length ? <Card className="text-sm text-ink-soft"><p className="font-semibold text-ink">График и связь</p>{site.workHours ? <p className="mt-1">{site.workHours}</p> : null}{site.phone ? <p>{site.phone}</p> : null}<div className="mt-2 flex flex-wrap gap-3">{socialTokens.map((token, index) => <SocialContact key={`${token}_${index}`} token={token} />)}</div></Card> : null}

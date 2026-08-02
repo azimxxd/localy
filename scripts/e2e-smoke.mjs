@@ -10,6 +10,9 @@ let appProcess = null;
 const testDataDir = mkdtempSync(join(tmpdir(), 'localy-e2e-'));
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const CRON_SECRET = 'localy-e2e-cron-secret';
+/** Куда складывать мобильные скриншоты. Пусто — снимки не делаются. */
+const SHOT_DIR = process.env.LOCALY_MOBILE_SHOTS ?? '';
 
 /** Chrome лежит в разных местах: на Windows — Program Files, на macOS — /Applications. */
 function defaultChromePath() {
@@ -41,7 +44,7 @@ async function ensureApp() {
   const port = new URL(APP).port || '3011';
   // Запускаем next через node напрямую: shim .bin/next на Windows — это .cmd,
   // и spawn без shell его не находит.
-  appProcess = spawn(process.execPath, [join('node_modules', 'next', 'dist', 'bin', 'next'), 'start', '-p', port], { cwd: process.cwd(), stdio: 'ignore', env: { ...process.env, LOCALY_DATA_FILE: join(testDataDir, 'localy.json'), LOCALY_SESSION_SECRET: 'localy-e2e-session-secret-at-least-32-characters', LOCALY_ALLOW_DEV_OTP: 'true', LOCALY_SECURE_COOKIES: 'false' } });
+  appProcess = spawn(process.execPath, [join('node_modules', 'next', 'dist', 'bin', 'next'), 'start', '-p', port], { cwd: process.cwd(), stdio: 'ignore', env: { ...process.env, LOCALY_DATA_FILE: join(testDataDir, 'localy.json'), LOCALY_SESSION_SECRET: 'localy-e2e-session-secret-at-least-32-characters', LOCALY_ALLOW_DEV_OTP: 'true', LOCALY_SECURE_COOKIES: 'false', LOCALY_CRON_SECRET: CRON_SECRET } });
   for (let attempt = 0; attempt < 200; attempt += 1) {
     await sleep(100);
     try { if ((await fetch(`${APP}/login`)).ok) return; } catch {}
@@ -438,6 +441,122 @@ try {
   const browserCookies = await client.send('Network.getAllCookies');
   if (browserCookies.cookies.some((cookie) => cookie.name === 'localy_customer')) throw new Error('Публичная заявка выдала клиентскую сессию без OTP');
   results.push('public form does not authenticate');
+
+  // ── Онлайн-запись по слотам ──
+  // Берём сайт бизнеса, под которым сидит владелец: записи из этого сайта
+  // видны в его кабинете, где дальше проверяем перенос и отмену.
+  await login(client, 'owner@localy.kz', '/dashboard');
+  await navigate(client, '/dashboard/qr');
+  const qrPageText = await evaluate(client, `[...document.querySelectorAll('a')].map((node) => node.getAttribute('href') || '').join(' ') + ' ' + document.body.innerText`);
+  const joinMatch = /\/join\/([a-z0-9-]+)/i.exec(qrPageText);
+  if (!joinMatch) throw new Error(`На странице QR нет ссылки /join/<slug>: ${qrPageText.slice(0, 300)}`);
+  const ownerSlug = joinMatch[1];
+  const bookingPath = `/b/${ownerSlug}`;
+
+  await client.send('Network.clearBrowserCookies');
+  await navigate(client, bookingPath);
+  const slotState = await evaluate(client, `(() => { const select = document.querySelector('select[name="at"]'); if (!select) return { ok: false }; const options = [...select.options].filter((option) => option.value); return { ok: true, count: options.length, first: options[0]?.value ?? null }; })()`);
+  if (!slotState.ok || slotState.count === 0) throw new Error(`На сайте ${bookingPath} нет свободных слотов записи: ${JSON.stringify(slotState)}`);
+  results.push(`public booking offers ${slotState.count} schedule slots`);
+
+  // Негативный: время вне сетки расписания сервер не принимает.
+  const outOfSchedule = new Date(Date.now() + 36 * 3_600_000);
+  outOfSchedule.setUTCHours(1, 7, 0, 0);
+  const injected = await evaluate(client, `(() => { const select = document.querySelector('select[name="at"]'); const form = select?.form; if (!form) return false; const option = document.createElement('option'); option.value = ${JSON.stringify(outOfSchedule.toISOString())}; option.textContent = 'вне расписания'; select.appendChild(option); select.value = option.value; select.dispatchEvent(new Event('change', { bubbles: true })); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; const name = form.elements.namedItem('name'); const phone = form.elements.namedItem('phone'); const service = form.elements.namedItem('service'); set.call(name, 'Слот E2E'); name.dispatchEvent(new Event('input', { bubbles: true })); set.call(phone, '+7 700 555 44 33'); phone.dispatchEvent(new Event('input', { bubbles: true })); service.value = [...service.options].filter((option) => option.value)[0]?.value ?? ''; service.dispatchEvent(new Event('change', { bubbles: true })); form.requestSubmit(); return true; })()`);
+  if (!injected) throw new Error('Форма записи не найдена');
+  await sleep(1500);
+  const rejection = await evaluate(client, `(() => { const alert = document.querySelector('[role="alert"]'); const success = document.querySelector('[role="status"]'); return { alert: alert?.innerText ?? null, success: success?.innerText ?? null }; })()`);
+  if (!rejection.alert || !rejection.alert.toLocaleLowerCase('ru').includes('расписан')) {
+    throw new Error(`Запись вне расписания не отклонена: ${JSON.stringify(rejection)}`);
+  }
+  results.push('negative: booking outside schedule rejected');
+
+  // Позитивный: запись на реальный свободный слот.
+  await navigate(client, bookingPath);
+  const booked = await evaluate(client, `(() => { const select = document.querySelector('select[name="at"]'); const form = select?.form; if (!form) return false; const slot = [...select.options].filter((option) => option.value)[0]; if (!slot) return false; select.value = slot.value; select.dispatchEvent(new Event('change', { bubbles: true })); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; const name = form.elements.namedItem('name'); const phone = form.elements.namedItem('phone'); const service = form.elements.namedItem('service'); set.call(name, 'Слот E2E'); name.dispatchEvent(new Event('input', { bubbles: true })); set.call(phone, '+7 700 555 44 33'); phone.dispatchEvent(new Event('input', { bubbles: true })); service.value = [...service.options].filter((option) => option.value)[0]?.value ?? ''; service.dispatchEvent(new Event('change', { bubbles: true })); form.requestSubmit(); return true; })()`);
+  if (!booked) throw new Error('Не удалось записаться на свободный слот');
+  await waitForText(client, 'Заявка на');
+  results.push('public booking on a free slot');
+
+  // Негативный: чужой реферальный код не выдаёт себя за приглашение.
+  const joinSlug = ownerSlug;
+  await navigate(client, `/join/${joinSlug}?ref=ZZZZZZ`);
+  const fakeReferral = await evaluate(client, 'document.body.innerText.includes("Вас пригласил")');
+  if (fakeReferral) throw new Error('Несуществующий реферальный код показан как настоящее приглашение');
+  results.push('negative: unknown referral code is not attributed');
+
+  // Негативный: планировщик без секрета.
+  const cronDenied = await evaluate(client, `fetch('/api/cron/run', { method: 'POST' }).then((response) => response.status)`);
+  if (cronDenied !== 401) throw new Error(`Cron без секрета вернул ${cronDenied}, ожидался 401`);
+  const cronWrong = await evaluate(client, `fetch('/api/cron/run', { method: 'POST', headers: { 'x-localy-cron-secret': 'nope' } }).then((response) => response.status)`);
+  if (cronWrong !== 401) throw new Error(`Cron с чужим секретом вернул ${cronWrong}, ожидался 401`);
+  results.push('negative: cron requires secret');
+
+  const cronOk = await evaluate(client, `fetch('/api/cron/run', { method: 'POST', headers: { 'x-localy-cron-secret': ${JSON.stringify(CRON_SECRET)} } }).then((response) => response.json()).then((data) => data.ok === true)`);
+  if (!cronOk) throw new Error('Cron с верным секретом не отработал');
+  results.push('cron runs automations with secret');
+
+  // ── Кабинет: расписание, отмена с причиной, журнал доставки ──
+  await login(client, 'owner@localy.kz', '/dashboard');
+  await assertPage(client, '/dashboard/bookings', 'Когда клиенты могут записаться');
+  results.push('booking schedule editor');
+
+  const cancelStarted = await evaluate(client, `(() => { const buttons = [...document.querySelectorAll('button')].filter((node) => node.innerText.trim().toLocaleLowerCase('ru') === 'отменить'); if (buttons.length === 0) return false; buttons[0].click(); return true; })()`);
+  if (!cancelStarted) {
+    const debugText = await evaluate(client, 'document.body.innerText.slice(0, 900)');
+    throw new Error(`Нет активных записей для отмены: ${debugText}`);
+  }
+  await sleep(400);
+  const cancelBlocked = await evaluate(client, `(() => { const button = [...document.querySelectorAll('button')].find((node) => node.innerText.trim().toLocaleLowerCase('ru') === 'отменить запись'); return Boolean(button?.disabled); })()`);
+  if (!cancelBlocked) throw new Error('Отмена без причины не заблокирована');
+  results.push('negative: cancel requires a reason');
+
+  const cancelled = await evaluate(client, `(() => { const input = [...document.querySelectorAll('input')].find((node) => node.previousElementSibling?.innerText?.includes('Причина отмены') || node.placeholder === 'Клиент перенёс планы'); if (!input) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(input, 'Клиент не придёт'); input.dispatchEvent(new Event('input', { bubbles: true })); const button = [...document.querySelectorAll('button')].find((node) => node.innerText.trim().toLocaleLowerCase('ru') === 'отменить запись'); if (!button || button.disabled) return false; button.click(); return true; })()`);
+  if (!cancelled) throw new Error('Не удалось отменить запись с причиной');
+  await waitForText(client, 'Причина отмены: Клиент не придёт');
+  const cancelledActions = await evaluate(client, `(() => { const card = [...document.querySelectorAll('div')].find((node) => node.innerText.includes('Причина отмены: Клиент не придёт')); return [...(card?.querySelectorAll('button') ?? [])].map((node) => node.innerText.trim()); })()`);
+  if (cancelledActions.some((label) => label.toLocaleLowerCase('ru') === 'перенести')) throw new Error('У отменённой записи остался перенос');
+  results.push('booking cancel with reason, no actions afterwards');
+
+  await assertPage(client, '/dashboard/campaigns', 'История рассылок');
+  const campaignSent = await evaluate(client, `(() => { const textarea = document.querySelector('textarea'); if (!textarea) return false; const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(textarea, '{name}, ждём вас снова — журнал доставки E2E'); textarea.dispatchEvent(new Event('input', { bubbles: true })); const button = [...document.querySelectorAll('button')].find((node) => node.innerText.trim().toLocaleLowerCase('ru') === 'запустить рассылку'); if (!button || button.disabled) return false; button.click(); return true; })()`);
+  if (!campaignSent) throw new Error('Не удалось запустить рассылку для проверки журнала');
+  await waitForText(client, 'Отправлено на');
+  await navigate(client, '/dashboard/campaigns');
+  const deliveryStatuses = await evaluate(client, `(() => { document.querySelectorAll('details').forEach((node) => { node.open = true; }); const summary = [...document.querySelectorAll('summary')].find((node) => node.innerText.toLocaleLowerCase('ru').includes('журнал доставки')); if (!summary) return null; summary.parentElement.open = true; return summary.parentElement.innerText; })()`);
+  if (!deliveryStatuses || !/доставлено|открыто|переход/.test(deliveryStatuses.toLocaleLowerCase('ru'))) {
+    const debugCampaigns = await evaluate(client, `(() => { document.querySelectorAll('details').forEach((node) => { node.open = true; }); return document.body.innerText.slice(-1200); })()`);
+    throw new Error(`В журнале доставки нет статусов: ${String(deliveryStatuses).slice(0, 200)} | ${debugCampaigns}`);
+  }
+  results.push('delivery log with per-recipient statuses');
+
+  // Реферальная связка: код клиента в CRM и рабочая ссылка приглашения.
+  await navigate(client, '/dashboard/crm');
+  const crmCustomerHref = await evaluate(client, `document.querySelector('a[href^="/dashboard/crm/"]')?.getAttribute('href') ?? null`);
+  if (!crmCustomerHref) throw new Error('В CRM нет карточек клиентов');
+  await assertPage(client, crmCustomerHref, 'Код приглашения');
+  const referralCode = await evaluate(client, `(document.body.innerText.match(/Код приглашения\\s*—\\s*([A-Z0-9]{4,8})/) ?? [])[1] ?? null`);
+  if (!referralCode) throw new Error('Код приглашения не найден в карточке клиента');
+  await client.send('Network.clearBrowserCookies');
+  await navigate(client, `/join/${ownerSlug}?ref=${referralCode}`);
+  await waitForText(client, 'Вас пригласил');
+  results.push('referral code is issued and attributed by link');
+
+  // ── Мобильные экраны: горизонтального скролла быть не должно ──
+  await client.send('Emulation.setDeviceMetricsOverride', { width: 375, height: 812, deviceScaleFactor: 1, mobile: true });
+  const mobilePaths = ['/', '/onboarding', '/dashboard', '/dashboard/site', '/dashboard/crm', '/dashboard/promos', '/dashboard/bookings', '/pos', bookingPath];
+  for (const mobilePath of mobilePaths) {
+    await navigate(client, mobilePath);
+    await sleep(250);
+    const overflow = await evaluate(client, '(() => { const doc = document.documentElement; return doc.scrollWidth - doc.clientWidth; })()');
+    if (overflow > 2) throw new Error(`Горизонтальный скролл на ${mobilePath}: ${overflow}px`);
+    if (SHOT_DIR) {
+      const shot = await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      writeFileSync(join(SHOT_DIR, `${mobilePath.replace(/[^a-z0-9]+/gi, '_') || 'home'}.png`), Buffer.from(shot.data, 'base64'));
+    }
+  }
+  await client.send('Emulation.clearDeviceMetricsOverride');
+  results.push(`mobile layout without horizontal scroll (${mobilePaths.length} screens)`);
 
   console.log(`E2E smoke OK (${results.length}):\n- ${results.join('\n- ')}`);
 } finally {

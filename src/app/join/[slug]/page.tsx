@@ -6,8 +6,9 @@ import { getRepo } from '@/lib/repo';
 
 export const dynamic = 'force-dynamic';
 
-export default async function JoinBusinessPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function JoinBusinessPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ ref?: string }> }) {
   const { slug } = await params;
+  const { ref } = await searchParams;
   const repo = await getRepo();
   const business = await repo.getBusinessBySlug(slug);
   if (!business || business.active === false) notFound();
@@ -17,6 +18,9 @@ export default async function JoinBusinessPage({ params }: { params: Promise<{ s
     repo.listPromos(business.id),
   ]);
   const activePromo = promos.find((promo) => promo.status === 'active' && (!promo.placements || promo.placements.includes('qr_landing')));
+  const referralCode = (ref ?? '').trim().toUpperCase().slice(0, 12);
+  const referrer = referralCode ? await repo.findCustomerByReferralCode(referralCode) : null;
+  const referrerName = referrer?.name ?? null;
 
   return (
     <main className="min-h-dvh bg-canvas px-4 py-6">
@@ -33,7 +37,11 @@ export default async function JoinBusinessPage({ params }: { params: Promise<{ s
           <p className="col-span-3 border-t border-line pt-2 text-xs text-ink-soft">Награда: «{loyalty.rewardTitle}»</p>
         </Card>
         {activePromo ? <Card className="flex items-center justify-between gap-3 border-brand/30 p-4"><div><p className="text-xs uppercase tracking-wide text-brand">Акция после регистрации</p><p className="font-semibold text-ink">{activePromo.title}</p></div><span className="text-xl text-brand">→</span></Card> : null}
-        <Card><h2 className="mb-3 text-lg font-semibold text-ink">Присоединиться</h2><JoinForm slug={slug} /></Card>
+        <Card>
+          <h2 className="mb-3 text-lg font-semibold text-ink">Присоединиться</h2>
+          {referrerName ? <p className="mb-3 border border-brand bg-brand-soft px-3 py-2 text-sm text-ink">Вас пригласил {referrerName}. После первой покупки бонусы получите оба.</p> : null}
+          <JoinForm slug={slug} referralCode={referralCode} />
+        </Card>
         <p className="text-center text-xs text-ink-soft">Баланс каждого заведения хранится отдельно.</p>
       </div>
     </main>

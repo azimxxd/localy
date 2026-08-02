@@ -19,7 +19,9 @@ import { forecastPromo } from '@/lib/engine';
 import type {
   ActivityLogEntry,
   AnonymousSale,
+  AutomationRun,
   Booking,
+  BookingSchedule,
   Branch,
   Business,
   BusinessGoal,
@@ -32,11 +34,13 @@ import type {
   Deposit,
   LoyaltyConfig,
   Membership,
+  MessageDelivery,
   Plan,
   Promo,
   PromoEvent,
   PromoKind,
   RecommendationRuleSetting,
+  Referral,
   SegmentCode,
   SiteConfig,
   Staff,
@@ -623,6 +627,10 @@ export interface SeedData {
   promoEvents: PromoEvent[];
   campaigns: Campaign[];
   bookings: Booking[];
+  bookingSchedules: BookingSchedule[];
+  referrals: Referral[];
+  messageDeliveries: MessageDelivery[];
+  automationRuns: AutomationRun[];
   deposits: Deposit[];
   activityLog: ActivityLogEntry[];
 }
@@ -938,6 +946,22 @@ export function generateSeed(nowInput?: Date): SeedData {
     user('usr_platform', 'platform@localy.kz', 'Админ Localy', 'platform_admin'),
   ];
 
+  // Расписание записи: у услуг слот длиннее и мест меньше, у розницы —
+  // короткий слот и несколько параллельных клиентов.
+  const bookingSchedules: BookingSchedule[] = businesses.map((business) => {
+    const services = business.typeCode === 'barber' || business.typeCode === 'beauty' || business.typeCode === 'repair';
+    return {
+      businessId: business.id,
+      weekdays: business.typeCode === 'repair' ? [1, 2, 3, 4, 5] : [1, 2, 3, 4, 5, 6],
+      openTime: services ? '10:00' : '09:00',
+      closeTime: services ? '20:00' : '21:00',
+      slotMinutes: services ? 60 : 30,
+      capacity: services ? 2 : 4,
+      leadHours: 2,
+      horizonDays: 14,
+    };
+  });
+
   return {
     users,
     businessTypes: BUSINESS_TYPES,
@@ -962,6 +986,10 @@ export function generateSeed(nowInput?: Date): SeedData {
     promoEvents,
     campaigns,
     bookings,
+    bookingSchedules,
+    referrals: [] as Referral[],
+    messageDeliveries: [] as MessageDelivery[],
+    automationRuns: [] as AutomationRun[],
     deposits,
     activityLog: activityLog.sort((a, b) => b.at.localeCompare(a.at)),
   };
