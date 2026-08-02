@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Отдельный прототип в общей рабочей папке не относится к приложению Localy.
+    "yandex-game/**",
   ]),
 ]);
 

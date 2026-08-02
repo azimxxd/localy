@@ -1,5 +1,6 @@
 'use server';
 
+import { randomInt } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { getSession, hashPassword, requireBusinessAccess } from '@/lib/auth';
 import { getRepo } from '@/lib/repo';
@@ -27,7 +28,9 @@ export async function inviteStaff(input: {
   const login = input.login.trim().toLowerCase();
   if (name.length < 2) throw new Error('Укажите имя сотрудника');
   if (!/^\S+@\S+\.\S+$/.test(login)) throw new Error('Укажите рабочий email');
-  if (input.password.length < 8) throw new Error('Пароль должен содержать минимум 8 символов');
+  if (input.password.length < 12 || !/[a-zа-я]/i.test(input.password) || !/\d/.test(input.password) || !/[^\p{L}\p{N}]/u.test(input.password)) {
+    throw new Error('Пароль: минимум 12 символов, буква, цифра и специальный знак');
+  }
 
   const repo = await getRepo();
   if (await repo.getUserByLogin(login)) throw new Error('Пользователь с таким email уже существует');
@@ -36,7 +39,7 @@ export async function inviteStaff(input: {
     branchId: input.branchId,
     name,
     role,
-    pin: String(Math.floor(1000 + Math.random() * 9000)),
+    pin: String(randomInt(1000, 10_000)),
     active: true,
   });
   await repo.createUser({

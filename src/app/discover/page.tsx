@@ -32,12 +32,10 @@ export default async function DiscoverPage() {
       <div className="grid gap-3 sm:grid-cols-2">
         {published.map((b) => (
           <Link key={b.id} href={`/b/${b.slug}`}>
-            <Card className="p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-semibold text-ink">{b.name}</p>
-                <Badge tone="muted">{typeTitle(b.typeCode)}</Badge>
-              </div>
-              <p className="mt-0.5 text-sm text-ink-soft">{b.city}</p>
+            <Card className="flex items-center gap-3 p-3">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center text-2xl font-semibold" style={{ backgroundColor: `${b.brandColor}18`, color: b.brandColor, border: `1px solid ${b.brandColor}55` }}>{b.name.slice(0, 1).toUpperCase()}</div>
+              <div className="min-w-0 flex-1"><p className="truncate font-semibold text-ink">{b.name}</p><p className="text-sm text-ink-soft">{b.city}</p></div>
+              <Badge tone="muted">{typeTitle(b.typeCode)}</Badge>
             </Card>
           </Link>
         ))}

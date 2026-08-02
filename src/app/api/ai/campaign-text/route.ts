@@ -18,6 +18,7 @@ import { SEGMENT_META } from '@/lib/engine';
 import { getRepo } from '@/lib/repo';
 import { MAX_CAMPAIGNS_PER_MONTH, type NotificationChannel, type SegmentCode } from '@/lib/types';
 import { getSession } from '@/lib/auth';
+import { enforceRateLimit } from '@/lib/rate-limit';
 
 interface Body {
   businessId?: string;
@@ -64,6 +65,9 @@ export async function POST(request: Request) {
   if (!session) return Response.json({ error: 'Требуется вход' }, { status: 401 });
   if (session.businessId !== businessId || !['owner', 'admin', 'marketer'].includes(session.role)) {
     return Response.json({ error: 'Нет доступа к бизнесу' }, { status: 403 });
+  }
+  if (!(await enforceRateLimit(`ai-campaign:${session.userId}`, 20, 60 * 60_000))) {
+    return Response.json({ error: 'Лимит генераций исчерпан. Повторите через час.' }, { status: 429 });
   }
 
   const repo = await getRepo();

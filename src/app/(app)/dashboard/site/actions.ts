@@ -16,10 +16,9 @@ export interface SiteEditorInput {
   primaryColor: string;
   phone: string;
   workHours: string;
-  telegram: string;
-  whatsapp: string;
-  instagram: string;
+  socials: string;
   fontStyle: 'clean' | 'editorial' | 'friendly';
+  catalogTitle: string;
   sections: SiteSection[];
   catalog: CatalogItem[];
   published: boolean;
@@ -38,6 +37,12 @@ export async function saveBusinessSite(input: SiteEditorInput): Promise<{ ok: tr
   }
 
   const repo = await getRepo();
+  const socials = input.socials.split(',').map((value) => value.trim()).filter(Boolean);
+  const socialValue = (platform: string) => {
+    const match = socials.find((value) => value.toLowerCase().includes(platform));
+    if (!match) return '';
+    return match.replace(new RegExp(`^${platform}\\s*[:—-]?\\s*`, 'i'), '').trim() || platform;
+  };
   await repo.updateBusiness(input.businessId, {
     name: input.name.trim(),
     brandColor: input.primaryColor,
@@ -52,10 +57,12 @@ export async function saveBusinessSite(input: SiteEditorInput): Promise<{ ok: tr
     primaryColor: input.primaryColor,
     phone: input.phone.trim(),
     workHours: input.workHours.trim(),
-    telegram: input.telegram.trim(),
-    whatsapp: input.whatsapp.trim(),
-    instagram: input.instagram.trim(),
+    telegram: socialValue('telegram'),
+    whatsapp: socialValue('whatsapp'),
+    instagram: socialValue('instagram'),
+    socials,
     fontStyle: input.fontStyle,
+    catalogTitle: input.catalogTitle.trim() || 'Каталог',
     sections: input.sections.map((section) => ({
       ...section,
       title: section.title.trim(),

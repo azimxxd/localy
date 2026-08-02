@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import JoinForm from '@/components/join/JoinForm';
-import { Badge, Card } from '@/components/ui/kit';
+import { Card } from '@/components/ui/kit';
 import { num } from '@/lib/format';
 import { getRepo } from '@/lib/repo';
 
@@ -21,22 +21,20 @@ export default async function JoinBusinessPage({ params }: { params: Promise<{ s
   return (
     <main className="min-h-dvh bg-canvas px-4 py-6">
       <div className="mx-auto max-w-md space-y-4">
-        <header className="border px-5 py-8 text-center" style={{ borderColor: business.brandColor }}>
-          <p className="ascii-kicker">Присоединиться к программе</p>
-          <pre aria-hidden className="my-4 text-sm leading-tight text-brand">{'  [ QR ]\n  /____\\\n  | +  |\n  \\____/'}</pre>
-          <h1 className="mt-2 text-3xl font-bold uppercase text-ink">{business.name}</h1>
-          <p className="mt-1 text-ink-soft">{business.city}</p>
+        <header className="border px-5 py-6 text-center" style={{ borderColor: business.brandColor, boxShadow: `inset 0 4px 0 ${business.brandColor}` }}>
+          <p className="ascii-kicker">Клуб гостей Localy</p>
+          <h1 className="mt-4 text-4xl font-bold uppercase text-ink">{business.name}</h1>
+          <p className="mt-1 text-sm uppercase tracking-[.14em] text-ink-soft">{business.city}</p>
         </header>
-        <Card>
-          <div className="flex items-start justify-between gap-3">
-            <div><h2 className="font-semibold text-ink">Стартовый бонус</h2><p className="mt-1 text-sm text-ink-soft">Один аккаунт и один QR для всех заведений Localy.</p></div>
-            <Badge tone="success">+{num(loyalty.startBonus ?? 0)}</Badge>
-          </div>
-          <p className="mt-3 text-sm text-ink-soft">{Math.round(loyalty.pointsPerCurrency * 100)}% с покупки вернётся бонусами. Награда: «{loyalty.rewardTitle}».</p>
+        <Card className="grid grid-cols-3 gap-2 p-3 text-center">
+          <div className="border-r border-line px-1"><p className="tnum text-xl font-bold text-brand">+{num(loyalty.startBonus ?? 0)}</p><p className="text-xs text-ink-soft">на старте</p></div>
+          <div className="border-r border-line px-1"><p className="tnum text-xl font-bold text-brand">{Math.round(loyalty.pointsPerCurrency * 100)}%</p><p className="text-xs text-ink-soft">с покупки</p></div>
+          <div className="px-1"><p className="text-xl font-bold text-brand">1 QR</p><p className="text-xs text-ink-soft">везде</p></div>
+          <p className="col-span-3 border-t border-line pt-2 text-xs text-ink-soft">Награда: «{loyalty.rewardTitle}»</p>
         </Card>
-        {activePromo ? <Card className="border-brand/30"><Badge tone="brand">Доступная акция</Badge><p className="mt-2 font-semibold text-ink">{activePromo.title}</p><p className="mt-1 text-sm text-ink-soft">Промокод появится в вашем кабинете после регистрации.</p></Card> : null}
+        {activePromo ? <Card className="flex items-center justify-between gap-3 border-brand/30 p-4"><div><p className="text-xs uppercase tracking-wide text-brand">Акция после регистрации</p><p className="font-semibold text-ink">{activePromo.title}</p></div><span className="text-xl text-brand">→</span></Card> : null}
         <Card><h2 className="mb-3 text-lg font-semibold text-ink">Присоединиться</h2><JoinForm slug={slug} /></Card>
-        <p className="text-center text-xs text-ink-soft">Localy хранит бонусы каждого бизнеса отдельно. {business.name} не увидит ваши покупки в других заведениях.</p>
+        <p className="text-center text-xs text-ink-soft">Баланс каждого заведения хранится отдельно.</p>
       </div>
     </main>
   );

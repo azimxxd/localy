@@ -46,7 +46,7 @@ export default async function MeBusinessPage({
   const visitProgress = rewardAvailable ? rewardEvery : membership.visits % rewardEvery;
   const progress = Math.min(1, visitProgress / rewardEvery);
   const expiryDaysLeft = loyalty.expiryDays === null ? null : Math.max(0, loyalty.expiryDays - Math.floor((nowMs - new Date(membership.lastSeen).getTime()) / 86_400_000));
-  const offers = promos.filter((p) => p.status === 'active');
+  const offers = promos.filter((p) => p.status === 'active' && (!p.placements || p.placements.includes('client_app')));
 
   return (
     <div className="mx-auto max-w-md space-y-5 px-4 py-6">

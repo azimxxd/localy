@@ -257,8 +257,6 @@ create table bookings (
   status      booking_status not null default 'pending'
 );
 
-create index bookings_business_time_idx on bookings (business_id, at);
-
 -- В MVP реальные деньги НЕ хранятся — это демонстрация модели.
 create table deposits (
   id          text primary key,

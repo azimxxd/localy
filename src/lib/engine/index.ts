@@ -290,6 +290,7 @@ export function forecastPromo(input: ForecastInput): PromoForecast {
   const roi = cost > 0 ? Math.min(15, Math.round((grossProfit / cost) * 10) / 10) : 0;
 
   return {
+    estimatedAudience: input.audienceSize,
     expectedNewCustomers,
     expectedReturns,
     expectedRevenue: revenue,

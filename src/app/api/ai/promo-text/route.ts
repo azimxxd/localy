@@ -16,14 +16,16 @@ import { BRAND_SYSTEM, generateJson, type JsonSchema } from '@/lib/ai/client';
 import { promoTextTemplate, type PromoText } from '@/lib/ai/templates';
 import { SEGMENT_META } from '@/lib/engine';
 import { getRepo } from '@/lib/repo';
-import type { PromoKind, SegmentCode } from '@/lib/types';
+import type { PromoGoal, PromoKind, SegmentCode } from '@/lib/types';
 import { getSession } from '@/lib/auth';
+import { enforceRateLimit } from '@/lib/rate-limit';
 
 interface Body {
   businessId?: string;
   kind?: PromoKind;
   value?: number;
   segment?: SegmentCode;
+  goal?: PromoGoal;
 }
 
 const SCHEMA: JsonSchema = {
@@ -44,7 +46,7 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Некорректный JSON в теле запроса' }, { status: 400 });
   }
 
-  const { businessId, kind, value, segment } = body;
+  const { businessId, kind, value, segment, goal } = body;
   if (!businessId || !kind || !segment || typeof value !== 'number') {
     return Response.json(
       { error: 'Нужны поля businessId, kind, value, segment' },
@@ -57,6 +59,9 @@ export async function POST(request: Request) {
   if (session.businessId !== businessId || !['owner', 'admin', 'marketer'].includes(session.role)) {
     return Response.json({ error: 'Нет доступа к бизнесу' }, { status: 403 });
   }
+  if (!(await enforceRateLimit(`ai-promo:${session.userId}`, 20, 60 * 60_000))) {
+    return Response.json({ error: 'Лимит генераций исчерпан. Повторите через час.' }, { status: 429 });
+  }
 
   const repo = await getRepo();
   const business = await repo.getBusiness(businessId);
@@ -65,7 +70,7 @@ export async function POST(request: Request) {
   }
 
   const loyalty = await repo.getLoyaltyConfig(businessId);
-  const segmentInfo = await repo.getSegment(businessId, segment);
+  const segmentInfo = goal === 'new_customers' ? null : await repo.getSegment(businessId, segment);
 
   const templateInput = {
     businessName: business.name,
@@ -81,8 +86,8 @@ export async function POST(request: Request) {
     `Заведение: «${business.name}», ${business.city}.`,
     `Тип бизнеса: ${business.typeCode}. Средний чек: ${business.avgCheck} ₸.`,
     `Тип акции: ${kind}. Размер: ${value}.`,
-    `Аудитория: ${SEGMENT_META[segment].title} — ${SEGMENT_META[segment].description}.`,
-    `Размер аудитории: ${segmentInfo.count} человек.`,
+    goal === 'new_customers' ? 'Аудитория: люди, которые ещё не были клиентами заведения. Не пиши так, будто они уже есть в CRM.' : `Аудитория: ${SEGMENT_META[segment].title} — ${SEGMENT_META[segment].description}.`,
+    segmentInfo ? `Размер аудитории: ${segmentInfo.count} человек.` : 'Текст должен звать на первый визит.',
     `Награда программы лояльности: ${loyalty.rewardTitle}.`,
     '',
     'Придумай заголовок и описание этой акции для клиентов заведения.',

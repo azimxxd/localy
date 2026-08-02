@@ -1,7 +1,8 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { createSession, destroySession, hashPassword } from '@/lib/auth';
+import { createSession, destroySession, hashPassword, passwordNeedsRehash, verifyPassword } from '@/lib/auth';
+import { enforceRateLimit, requestRateLimitKey } from '@/lib/rate-limit';
 import { getRepo } from '@/lib/repo';
 
 export interface LoginState {
@@ -12,9 +13,19 @@ export async function loginAction(_state: LoginState, formData: FormData): Promi
   const password = String(formData.get('password') ?? '');
   if (!login || !password) return { error: 'Введите логин и пароль' };
 
-  const user = await (await getRepo()).getUserByLogin(login);
-  if (!user || !user.active || user.passwordHash !== hashPassword(password)) {
+  const rateKey = await requestRateLimitKey(`login:${login}`);
+  if (!(await enforceRateLimit(rateKey, 8, 15 * 60_000))) {
+    return { error: 'Слишком много попыток. Повторите через 15 минут.' };
+  }
+
+  const repo = await getRepo();
+  const user = await repo.getUserByLogin(login);
+  if (!user || !user.active || !verifyPassword(password, user.passwordHash)) {
     return { error: 'Неверный логин или пароль' };
+  }
+
+  if (passwordNeedsRehash(user.passwordHash)) {
+    await repo.updateUser(user.id, { passwordHash: hashPassword(password) });
   }
 
   await createSession(user.id);

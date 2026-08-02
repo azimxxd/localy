@@ -45,6 +45,7 @@ import {
   type Campaign,
   type Customer,
   type CustomerProfile,
+  type Deposit,
   type LoyaltyConfig,
   type Membership,
   type NotificationChannel,
@@ -68,6 +69,8 @@ import {
 // ─────────────────────────────────────────────────────────────
 
 let db: SeedData | null = null;
+let persistLocal = true;
+let persistHook: ((data: SeedData) => Promise<void> | void) | null = null;
 
 const DATA_FILE = process.env.LOCALY_DATA_FILE
   ? path.resolve(process.env.LOCALY_DATA_FILE)
@@ -76,6 +79,7 @@ const DATA_TMP_FILE = `${DATA_FILE}.tmp`;
 
 function persist() {
   if (!db) return;
+  if (!persistLocal) return;
   mkdirSync(path.dirname(DATA_FILE), { recursive: true });
   writeFileSync(DATA_TMP_FILE, `${JSON.stringify(db, null, 2)}\n`, 'utf8');
   renameSync(DATA_TMP_FILE, DATA_FILE);
@@ -143,6 +147,16 @@ function emitTransaction(t: Transaction) {
 const nowIso = () => new Date().toISOString();
 const uid = (prefix: string) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
+
+function promoAudienceSize(input: CreatePromoInput): number {
+  const segment = segmentsOf(input.businessId).find((item) => item.code === input.segment);
+  if (input.goal !== 'new_customers') return segment?.count ?? 0;
+  const durationDays = Math.max(1, Math.min(60, Math.ceil((new Date(input.endsAt).getTime() - new Date(input.startsAt).getTime()) / 86_400_000)));
+  const qrScans = state().businessQrStats.find((item) => item.businessId === input.businessId)?.scans ?? 0;
+  const placementFactor = (input.placements ?? []).reduce((sum, placement) => sum + ({ site: 0.8, qr_landing: 0.7, cashier: 0.15, client_app: 0 }[placement] ?? 0), 0);
+  const dailyReach = Math.max(6, profilesOf(input.businessId).length * 0.12, qrScans / 30);
+  return Math.max(1, Math.round(dailyReach * durationDays * Math.max(0.25, placementFactor)));
+}
 
 function inRange(iso: string, range?: DateRange): boolean {
   if (!range) return true;
@@ -279,7 +293,16 @@ function logAction(
 // Реализация
 // ─────────────────────────────────────────────────────────────
 
-export function createMockRepo(): Repo {
+export interface StateRepoOptions {
+  initialState?: SeedData;
+  persistLocal?: boolean;
+  onPersist?: (data: SeedData) => Promise<void> | void;
+}
+
+export function createMockRepo(options: StateRepoOptions = {}): Repo {
+  persistLocal = options.persistLocal ?? true;
+  persistHook = options.onPersist ?? null;
+  if (options.initialState) db = clone(options.initialState);
   const repo: Repo = {
     // ── Пользователи и demo-auth ──
     async listUsers() {
@@ -1073,13 +1096,13 @@ export function createMockRepo(): Repo {
     async forecastPromo(input: CreatePromoInput) {
       const s = state();
       const business = s.businesses.find((b) => b.id === input.businessId);
-      const segment = segmentsOf(input.businessId).find((x) => x.code === input.segment);
+      const audienceSize = promoAudienceSize(input);
 
       return forecastPromo({
         kind: input.kind,
         value: input.value,
         segment: input.segment,
-        audienceSize: segment?.count ?? 0,
+        audienceSize,
         avgCheck: business?.avgCheck ?? 3000,
         pointsPerCurrency: loyaltyOf(input.businessId).pointsPerCurrency,
       });
@@ -1087,8 +1110,8 @@ export function createMockRepo(): Repo {
 
     async createPromo(input: CreatePromoInput) {
       assertPlanLimit(input.businessId, 'activePromos', state().promos.filter((item) => item.businessId === input.businessId && (item.status === 'active' || item.status === 'scheduled')).length, 'активных акций');
-      const segment = segmentsOf(input.businessId).find((x) => x.code === input.segment);
       const forecast = await repo.forecastPromo(input);
+      const audienceSize = promoAudienceSize(input);
 
       const promo: Promo = {
         id: uid('promo'),
@@ -1098,11 +1121,12 @@ export function createMockRepo(): Repo {
         value: input.value,
         segment: input.segment,
         goal: input.goal,
+        audienceMode: input.goal === 'new_customers' ? 'public' : 'segment',
         branchId: input.branchId ?? null,
         channel: input.channel ?? 'telegram',
         placements: input.placements ?? ['site', 'client_app'],
         body: input.body,
-        audienceSize: segment?.count ?? 0,
+        audienceSize,
         startsAt: input.startsAt,
         endsAt: input.endsAt,
         status: 'draft',
@@ -1124,17 +1148,17 @@ export function createMockRepo(): Repo {
       return clone(p);
     },
 
-    /**
-     * Запуск акции. Сразу проставляем стадию «получили» всем, кто в сегменте
-     * и дал согласие хотя бы на один канал — воронка начинает заполняться,
-     * не дожидаясь реальных визитов.
-     */
+    /** Запуск публикует акцию. Доставку сообщений выполняет отдельная рассылка. */
     async launchPromo(id) {
       const s = state();
       const promo = s.promos.find((p) => p.id === id);
       if (!promo) throw new Error(`Акция ${id} не найдена`);
 
       promo.status = promo.startsAt > nowIso() ? 'scheduled' : 'active';
+      if (promo.audienceMode === 'public' || promo.goal === 'new_customers') {
+        logAction(promo.businessId, promo.status === 'scheduled' ? 'promo_scheduled' : 'promo_launched', promo.status === 'scheduled' ? `Акция «${promo.title}» запланирована` : `Публичная акция «${promo.title}» запущена`, { promoId: promo.id, estimatedReach: promo.audienceSize });
+        return clone(promo);
+      }
       const segment = segmentsOf(promo.businessId).find((x) => x.code === promo.segment);
       const recipients = (segment?.customerIds ?? []).filter((cid) => {
         const m = s.memberships.find(
@@ -1148,14 +1172,10 @@ export function createMockRepo(): Repo {
         logAction(promo.businessId, 'promo_scheduled', `Акция «${promo.title}» запланирована`, { promoId: promo.id, startsAt: promo.startsAt });
         return clone(promo);
       }
-      const at = nowIso();
-      recipients.forEach((customerId) => {
-        s.promoEvents.push({ promoId: promo.id, customerId, stage: 'sent', at });
-      });
-
-      logAction(promo.businessId, 'promo_launched', `Запущена акция «${promo.title}»`, {
+      logAction(promo.businessId, 'promo_launched', `Акция «${promo.title}» опубликована`, {
         promoId: promo.id,
         audienceSize: recipients.length,
+        delivery: 'requires_campaign',
       });
       return clone(promo);
     },
@@ -1424,6 +1444,23 @@ export function createMockRepo(): Repo {
       );
     },
 
+    async createDeposit(input) {
+      const deposit: Deposit = { ...input, id: uid('dep'), initialBalance: input.initialBalance ?? input.balance, issuedAt: input.issuedAt ?? nowIso() };
+      state().deposits.push(deposit);
+      logAction(input.businessId, 'deposit_created', `Выпущен ${input.kind === 'certificate' ? 'сертификат' : input.kind === 'subscription' ? 'абонемент' : 'депозит'} «${input.title ?? 'Без названия'}»`, { depositId: deposit.id, customerId: input.customerId, balance: input.balance });
+      return clone(deposit);
+    },
+
+    async adjustDeposit(id, delta) {
+      const deposit = state().deposits.find((item) => item.id === id);
+      if (!deposit) throw new Error('Сертификат или абонемент не найден');
+      const next = deposit.balance + delta;
+      if (!Number.isFinite(delta) || delta === 0 || next < 0) throw new Error('Некорректная сумма списания');
+      deposit.balance = next;
+      logAction(deposit.businessId, 'deposit_adjusted', `${delta < 0 ? 'Списано' : 'Начислено'} ${Math.abs(delta)} ₸ по «${deposit.title ?? 'сертификату'}»`, { depositId: id, delta, balance: next });
+      return clone(deposit);
+    },
+
     // ── Realtime ──
     subscribeTransactions(businessId, onInsert) {
       let set = listeners.get(businessId);
@@ -1483,6 +1520,8 @@ export function createMockRepo(): Repo {
     'simulateSend',
     'createBooking',
     'updateBooking',
+    'createDeposit',
+    'adjustDeposit',
   ]);
 
   return new Proxy(repo, {
@@ -1496,9 +1535,16 @@ export function createMockRepo(): Repo {
         return original;
       }
       return async (...args: unknown[]) => {
-        const result = await (original as (...callArgs: unknown[]) => unknown)(...args);
-        persist();
-        return result;
+        const before = persistHook && db ? clone(db) : null;
+        try {
+          const result = await (original as (...callArgs: unknown[]) => unknown)(...args);
+          persist();
+          if (persistHook && db) await persistHook(clone(db));
+          return result;
+        } catch (error) {
+          if (before) db = before;
+          throw error;
+        }
       };
     },
   });

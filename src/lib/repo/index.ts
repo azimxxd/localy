@@ -135,7 +135,7 @@ export interface Repo {
   getUserByLogin(login: string): Promise<User | null>;
   updateUser(
     id: string,
-    patch: Partial<Pick<User, 'name' | 'active' | 'role' | 'businessId' | 'staffId'>>,
+    patch: Partial<Pick<User, 'name' | 'active' | 'role' | 'businessId' | 'staffId' | 'passwordHash'>>,
   ): Promise<User>;
   resetDemoData(): Promise<void>;
 
@@ -277,6 +277,8 @@ export interface Repo {
   createBooking(input: Omit<Booking, 'id' | 'status'>): Promise<Booking>;
   updateBooking(id: string, patch: Partial<Booking>): Promise<Booking>;
   listDeposits(businessId: string, customerId?: string): Promise<Deposit[]>;
+  createDeposit(input: Omit<Deposit, 'id'>): Promise<Deposit>;
+  adjustDeposit(id: string, delta: number): Promise<Deposit>;
 
   // ── Realtime ──
   /**
@@ -302,13 +304,18 @@ let cached: Repo | null = null;
 export async function getRepo(): Promise<Repo> {
   if (cached) return cached;
 
-  const useSupabase = process.env.LOCALY_REPO === 'supabase';
-  if (useSupabase && (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)) {
-    throw new Error('Для LOCALY_REPO=supabase нужны NEXT_PUBLIC_SUPABASE_URL и NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  const mode = process.env.LOCALY_REPO ?? 'json';
+  if (!['json', 'supabase'].includes(mode)) throw new Error(`Неизвестный LOCALY_REPO=${mode}`);
+  const useSupabase = mode === 'supabase';
+  if (useSupabase && (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY)) {
+    throw new Error('Для LOCALY_REPO=supabase нужны NEXT_PUBLIC_SUPABASE_URL и SUPABASE_SERVICE_ROLE_KEY');
+  }
+  if (!useSupabase && (process.env.RAILWAY_ENVIRONMENT || process.env.VERCEL_ENV === 'production')) {
+    throw new Error('В production-развёртывании задайте LOCALY_REPO=supabase; JSON-хранилище предназначено только для локального запуска');
   }
 
   const repo = useSupabase
-    ? (await import('./supabase')).createSupabaseRepo()
+    ? await (await import('./supabase')).createSupabaseRepo()
     : (await import('./mock')).createMockRepo();
 
   cached = repo;

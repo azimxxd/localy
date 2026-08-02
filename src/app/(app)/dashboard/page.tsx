@@ -74,17 +74,16 @@ export default async function DashboardPage() {
           <p className="ascii-kicker">Быстрый старт</p>
           <h2 className="mt-1 font-semibold text-ink">Что хотите сделать?</h2>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/dashboard/promos/new" className={btnClass('primary')}>Создать акцию</Link>
-          <Link href="/pos" className={btnClass('secondary')}>Записать покупку</Link>
-          <Link href="/pos" className={btnClass('secondary')}>Открыть режим кассира</Link>
-          <Link href="/dashboard/crm" className={btnClass('secondary')}>Добавить клиента</Link>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+          <Link href="/dashboard/promos/new" className={btnClass('primary', 'min-h-14 px-3 text-center')}>Создать акцию</Link>
+          <Link href="/pos" className={btnClass('secondary', 'min-h-14 px-3 text-center')}>Открыть кассу</Link>
+          <Link href="/dashboard/crm" className={btnClass('secondary', 'min-h-14 px-3 text-center')}>Добавить клиента</Link>
+          <Link href={`/b/${business.slug}`} className={btnClass('secondary', 'min-h-14 px-3 text-center')}>Открыть сайт</Link>
         </div>
         <details className="ascii-details border-t border-line pt-3 text-sm">
           <summary className="text-ink-soft hover:text-brand">Ещё действия и показатели</summary>
           <div className="mt-3 flex flex-wrap gap-2">
             <Link href="/dashboard/loyalty" className={btnClass('ghost')}>Настроить лояльность</Link>
-            <Link href={`/b/${business.slug}`} className={btnClass('ghost')}>Открыть сайт</Link>
             <Link href="/dashboard/campaigns" className={btnClass('ghost')}>Отправить предложение</Link>
           </div>
           <dl className="mt-4 grid gap-2 border-t border-line pt-3 sm:grid-cols-2 lg:grid-cols-4">

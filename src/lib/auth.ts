@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getRepo } from '@/lib/repo';
@@ -9,8 +9,16 @@ import type { UserRole } from '@/lib/types';
 export const SESSION_COOKIE = 'localy_session';
 export const CUSTOMER_COOKIE = 'localy_customer';
 const SESSION_TTL_SECONDS = 60 * 60 * 12;
-const SESSION_SECRET =
-  process.env.LOCALY_SESSION_SECRET || 'localy-local-demo-session-secret-change-in-production';
+const LOCAL_DEVELOPMENT_SECRET = 'localy-development-only-session-secret';
+
+function sessionSecret(): string {
+  const configured = process.env.LOCALY_SESSION_SECRET;
+  if (configured && configured.length >= 32) return configured;
+  if (process.env.NODE_ENV !== 'production' || process.env.LOCALY_ALLOW_INSECURE_LOCAL === 'true') {
+    return LOCAL_DEVELOPMENT_SECRET;
+  }
+  throw new Error('LOCALY_SESSION_SECRET должен быть задан и содержать минимум 32 символа');
+}
 
 interface SessionPayload {
   userId: string;
@@ -27,11 +35,39 @@ export interface SessionUser {
 }
 
 export function hashPassword(password: string): string {
-  return `sha256:${createHash('sha256').update(password).digest('hex')}`;
+  const salt = randomBytes(16);
+  const derived = scryptSync(password, salt, 64);
+  return `scrypt:${salt.toString('base64url')}:${derived.toString('base64url')}`;
+}
+
+export function verifyPassword(password: string, stored: string): boolean {
+  if (stored.startsWith('sha256:')) {
+    const expected = Buffer.from(stored.slice('sha256:'.length), 'hex');
+    const supplied = createHash('sha256').update(password).digest();
+    return expected.length === supplied.length && timingSafeEqual(expected, supplied);
+  }
+  const [algorithm, saltValue, hashValue] = stored.split(':');
+  if (algorithm !== 'scrypt' || !saltValue || !hashValue) return false;
+  try {
+    const expected = Buffer.from(hashValue, 'base64url');
+    const supplied = scryptSync(password, Buffer.from(saltValue, 'base64url'), expected.length);
+    return expected.length === supplied.length && timingSafeEqual(expected, supplied);
+  } catch {
+    return false;
+  }
+}
+
+export function passwordNeedsRehash(stored: string): boolean {
+  return !stored.startsWith('scrypt:');
 }
 
 function signature(value: string): string {
-  return createHmac('sha256', SESSION_SECRET).update(value).digest('base64url');
+  return createHmac('sha256', sessionSecret()).update(value).digest('base64url');
+}
+
+function secureCookies(): boolean {
+  if (process.env.LOCALY_SECURE_COOKIES === 'false') return false;
+  return process.env.NODE_ENV === 'production';
 }
 
 function encodeSession(payload: SessionPayload): string {
@@ -64,9 +100,10 @@ export async function createSession(userId: string): Promise<void> {
     {
       httpOnly: true,
       sameSite: 'lax',
-      secure: process.env.LOCALY_SECURE_COOKIES === 'true',
+      secure: secureCookies(),
       path: '/',
       maxAge: SESSION_TTL_SECONDS,
+      priority: 'high',
     },
   );
 }
@@ -84,11 +121,17 @@ export async function createCustomerSession(customerId: string): Promise<void> {
     {
       httpOnly: true,
       sameSite: 'lax',
-      secure: process.env.LOCALY_SECURE_COOKIES === 'true',
+      secure: secureCookies(),
       path: '/',
       maxAge: 30 * 24 * 60 * 60,
+      priority: 'high',
     },
   );
+}
+
+export async function destroyCustomerSession(): Promise<void> {
+  const store = await cookies();
+  store.delete(CUSTOMER_COOKIE);
 }
 
 export async function getCustomerSessionId(): Promise<string | null> {

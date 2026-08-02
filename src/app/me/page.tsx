@@ -23,6 +23,16 @@ export default async function MePage() {
   const nowMs = new Date().getTime();
   const repo = await getRepo();
   const sessionCustomerId = await getCustomerSessionId();
+  const publicDemoEnabled = process.env.NODE_ENV !== 'production' || process.env.LOCALY_ENABLE_PUBLIC_DEMO === 'true';
+  if (!sessionCustomerId && !publicDemoEnabled) {
+    return (
+      <div className="mx-auto max-w-md space-y-4 px-4 py-16 text-center">
+        <h1 className="font-display text-3xl text-ink">Войдите по номеру телефона</h1>
+        <p className="text-ink-soft">Выберите заведение и подтвердите номер кодом из SMS — после этого откроется ваш универсальный QR.</p>
+        <Link href="/discover" className="inline-flex border border-brand bg-brand px-5 py-3 text-surface">Выбрать заведение</Link>
+      </div>
+    );
+  }
   const customerId = sessionCustomerId ?? DEMO_CUSTOMER_ID;
   const existingCustomer = await repo.getCustomer(customerId);
   const customer = existingCustomer ? await repo.rotateQrToken(customerId) : null;

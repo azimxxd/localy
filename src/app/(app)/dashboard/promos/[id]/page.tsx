@@ -12,7 +12,7 @@ import PromoActions from '@/components/promos/PromoActions';
 import { Badge, Card, EmptyState, Stat } from '@/components/ui/kit';
 import { SEGMENT_META } from '@/lib/engine';
 import { kzt, num, percent } from '@/lib/format';
-import { PROMO_KIND_LABELS, PROMO_STATUS_LABELS } from '@/lib/promo-labels';
+import { PROMO_GOAL_LABELS, PROMO_KIND_LABELS, PROMO_PLACEMENT_LABELS, PROMO_STATUS_LABELS } from '@/lib/promo-labels';
 import { getRepo } from '@/lib/repo';
 import { requireSession } from '@/lib/auth';
 import { getActiveBusiness } from '@/lib/demo';
@@ -32,7 +32,11 @@ export default async function PromoResultPage({
   }
 
   const hasRun = promo.status === 'active' || promo.status === 'paused' || promo.status === 'finished';
-  const funnel = hasRun ? await repo.getPromoFunnel(id) : null;
+  const isPublicAcquisition = promo.audienceMode === 'public' || promo.goal === 'new_customers';
+  const [funnel, branches] = await Promise.all([
+    hasRun ? repo.getPromoFunnel(id) : Promise.resolve(null),
+    repo.listBranches(business.id),
+  ]);
 
   const stages = funnel
     ? [
@@ -43,7 +47,8 @@ export default async function PromoResultPage({
         { label: 'Использовали', value: funnel.redeemed },
       ]
     : [];
-  const max = funnel ? Math.max(1, funnel.sent) : 1;
+  const visibleStages = isPublicAcquisition ? stages.filter((stage) => stage.label === 'Пришли' || stage.label === 'Использовали') : stages;
+  const max = funnel ? (isPublicAcquisition ? Math.max(1, promo.audienceSize, funnel.visited, funnel.redeemed) : Math.max(1, funnel.sent)) : 1;
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -55,8 +60,8 @@ export default async function PromoResultPage({
         <div>
           <h1 className="text-2xl font-bold text-ink">{promo.title}</h1>
           <p className="text-sm text-ink-soft">
-            {PROMO_KIND_LABELS[promo.kind]} · {SEGMENT_META[promo.segment].title} ·{' '}
-            {num(promo.audienceSize)} чел
+            {[PROMO_KIND_LABELS[promo.kind], promo.goal ? PROMO_GOAL_LABELS[promo.goal] : null].filter(Boolean).join(' · ')} ·{' '}
+            {isPublicAcquisition ? `оценочный охват ${num(promo.audienceSize)}` : `${SEGMENT_META[promo.segment].title} · ${num(promo.audienceSize)} чел`}
           </p>
         </div>
         <Badge tone={promo.status === 'active' ? 'success' : 'brand'}>
@@ -64,13 +69,16 @@ export default async function PromoResultPage({
         </Badge>
       </header>
 
-      <PromoActions promo={promo} />
+      <PromoActions promo={promo} branches={branches} />
+
+      <Card className="space-y-2"><h2 className="font-semibold">Как работает акция</h2><p className="text-sm text-ink-soft">{isPublicAcquisition ? 'Привлекает ещё не зарегистрированных людей. Охват до запуска — оценка; визиты и применения фиксируются по кассе.' : `Акция нацелена на CRM-сегмент «${SEGMENT_META[promo.segment].title}». Публикация акции не отправляет сообщения: для доставки запустите отдельную рассылку.`}</p><div className="flex flex-wrap gap-2">{(promo.placements ?? []).map((placement) => <Badge key={placement} tone="muted">{PROMO_PLACEMENT_LABELS[placement]}</Badge>)}</div><p className="text-xs text-ink-soft">Промокод: <span className="font-semibold text-ink">{promo.promocode}</span> · действует {new Date(promo.startsAt).toLocaleDateString('ru-RU')}–{new Date(promo.endsAt).toLocaleDateString('ru-RU')}</p></Card>
 
       {funnel ? (
         <>
           <Card className="space-y-3">
             <h2 className="text-lg font-semibold text-ink">Воронка</h2>
-            {stages.map((s) => (
+            {isPublicAcquisition && funnel.visited === 0 && funnel.redeemed === 0 ? <p className="text-sm text-ink-soft">Пока нет зафиксированных визитов или применений. Оценочный охват не выдаётся за фактические показы.</p> : null}
+            {visibleStages.map((s) => (
               <div key={s.label}>
                 <div className="mb-1 flex justify-between text-sm">
                   <span className="text-ink-soft">{s.label}</span>
@@ -96,7 +104,9 @@ export default async function PromoResultPage({
             <Stat label="Придут снова" value={num(promo.forecast.expectedReturns)} />
             <Stat label="Новые клиенты" value={num(promo.forecast.expectedNewCustomers)} />
             <Stat label="Ожидаемая выручка" value={kzt(promo.forecast.expectedRevenue)} />
+            <Stat label="Стоимость предложения" value={kzt(promo.forecast.expectedCost)} />
             <Stat label="Окупаемость" value={`${promo.forecast.roi}×`} />
+            <Stat label="Безубыточная скидка" value={`${promo.forecast.breakEvenDiscount}%`} />
           </div>
           <p className="text-sm text-ink-soft">
             Акция ещё не запущена — показан прогноз. После запуска здесь появится воронка.

@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import LoginForm from '@/components/auth/LoginForm';
 import { Card } from '@/components/ui/kit';
 import { getSession } from '@/lib/auth';
@@ -14,10 +15,12 @@ export default async function LoginPage() {
       <div className="w-full max-w-2xl">
         <div className="mb-6 text-center">
           <p className="text-3xl font-bold text-brand">Localy</p>
-          <h1 className="mt-3 text-2xl font-bold text-ink">Вход в демонстрационный кабинет</h1>
+          <p className="mt-1 text-xs uppercase tracking-[0.18em] text-ink-soft">Кабинет бизнеса</p>
+          <h1 className="mt-3 text-2xl font-bold text-ink">Вход для владельцев и сотрудников</h1>
           <p className="mt-2 text-sm text-ink-soft">
-            Выберите роль — права и навигация изменятся автоматически.
+            Здесь только управление бизнесом: CRM, акции, рассылки, сайт и аналитика.
           </p>
+          <Link href="/discover" className="mt-3 inline-block text-sm text-brand underline underline-offset-4">Я клиент — открыть мои бонусы</Link>
         </div>
         <Card className="p-6">
           <LoginForm />

@@ -205,8 +205,12 @@ export interface SiteConfig {
   telegram?: string;
   whatsapp?: string;
   instagram?: string;
+  /** Соцсети и площадки в виде отдельных значений, введённых через запятую. */
+  socials?: string[];
   primaryColor?: string;
   fontStyle?: 'clean' | 'editorial' | 'friendly';
+  /** Общий заголовок блока каталога; category у CatalogItem — это группа отдельной позиции. */
+  catalogTitle?: string;
   catalog?: CatalogItem[];
 }
 
@@ -439,6 +443,8 @@ export type PromoPlacement = 'site' | 'client_app' | 'cashier' | 'qr_landing';
  * Владелец видит цифру прежде, чем потратил деньги.
  */
 export interface PromoForecast {
+  /** CRM-аудитория или оценочный публичный охват, на котором построен прогноз. */
+  estimatedAudience?: number;
   expectedNewCustomers: number;
   expectedReturns: number;
   expectedRevenue: number;
@@ -458,6 +464,8 @@ export interface Promo {
   value: number;
   segment: SegmentCode;
   goal?: PromoGoal;
+  /** public — ещё не зарегистрированные люди; segment — клиенты из CRM. */
+  audienceMode?: 'public' | 'segment';
   branchId?: string | null;
   channel?: NotificationChannel;
   placements?: PromoPlacement[];
@@ -624,6 +632,9 @@ export interface Deposit {
   customerId: string;
   balance: number;
   kind: 'deposit' | 'subscription' | 'certificate';
+  title?: string;
+  initialBalance?: number;
+  issuedAt?: string;
 }
 
 // ─────────────────────────────────────────────────────────────

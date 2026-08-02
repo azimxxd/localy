@@ -17,7 +17,7 @@ export default function StaffManager({ businessId, staff, branches, viewerRole }
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [login, setLogin] = useState('');
-  const [password, setPassword] = useState('Localy2026');
+  const [password, setPassword] = useState('');
   const [role, setRole] = useState<StaffRole>('cashier');
   const [branchId, setBranchId] = useState(branches[0]?.id ?? '');
 
@@ -33,7 +33,7 @@ export default function StaffManager({ businessId, staff, branches, viewerRole }
     <div className="flex justify-end"><Button onClick={() => setOpen((value) => !value)}>{open ? 'Закрыть' : 'Пригласить сотрудника'}</Button></div>
     {open ? <Card className="space-y-3">
       <h2 className="font-semibold text-ink">Новый сотрудник</h2>
-      <div className="grid gap-3 md:grid-cols-2"><TextInput label="Имя" value={name} onChange={(e) => setName(e.target.value)} /><TextInput label="Рабочий email" type="email" value={login} onChange={(e) => setLogin(e.target.value)} /><TextInput label="Временный пароль" value={password} onChange={(e) => setPassword(e.target.value)} />
+      <div className="grid gap-3 md:grid-cols-2"><TextInput label="Имя" value={name} onChange={(e) => setName(e.target.value)} /><TextInput label="Рабочий email" type="email" value={login} onChange={(e) => setLogin(e.target.value)} /><TextInput label="Временный пароль" type="password" autoComplete="new-password" minLength={12} value={password} onChange={(e) => setPassword(e.target.value)} />
       <label className="text-sm"><span className="mb-1 block font-medium text-ink">Роль</span><select className="w-full border border-line px-3 py-2.5" value={role} onChange={(e) => setRole(e.target.value as StaffRole)}>{MANAGED.filter((item) => viewerRole === 'owner' || item !== 'admin').map((item) => <option key={item} value={item}>{ROLE_LABELS[item]}</option>)}</select></label>
       <label className="text-sm"><span className="mb-1 block font-medium text-ink">Филиал</span><select className="w-full border border-line px-3 py-2.5" value={branchId} onChange={(e) => setBranchId(e.target.value)}><option value="">Все филиалы</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.title}</option>)}</select></label></div>
       <Button disabled={pending} onClick={() => run(() => inviteStaff({ businessId, name, login, password, role, branchId: branchId || null }), 'Сотрудник приглашён')}>Создать доступ</Button>

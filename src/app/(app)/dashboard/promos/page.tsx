@@ -9,7 +9,7 @@ import { Badge, Card, EmptyState, btnClass } from '@/components/ui/kit';
 import { getActiveBusiness } from '@/lib/demo';
 import { SEGMENT_META } from '@/lib/engine';
 import { dateShort, num } from '@/lib/format';
-import { PROMO_KIND_LABELS, PROMO_STATUS_LABELS } from '@/lib/promo-labels';
+import { PROMO_GOAL_LABELS, PROMO_KIND_LABELS, PROMO_STATUS_LABELS } from '@/lib/promo-labels';
 import { getRepo } from '@/lib/repo';
 import type { PromoStatus } from '@/lib/types';
 import { requireSession } from '@/lib/auth';
@@ -53,8 +53,7 @@ export default async function PromosPage() {
                     <Badge tone={STATUS_TONE[p.status]}>{PROMO_STATUS_LABELS[p.status]}</Badge>
                   </div>
                   <p className="mt-0.5 truncate text-xs text-ink-soft">
-                    {PROMO_KIND_LABELS[p.kind]} · {SEGMENT_META[p.segment].title} ·{' '}
-                    {num(p.audienceSize)} чел · с {dateShort(p.startsAt)}
+                    {p.goal ? PROMO_GOAL_LABELS[p.goal] : PROMO_KIND_LABELS[p.kind]} · {p.audienceMode === 'public' || p.goal === 'new_customers' ? `публичный охват ≈ ${num(p.audienceSize)}` : `${SEGMENT_META[p.segment].title} · ${num(p.audienceSize)} чел`} · с {dateShort(p.startsAt)}
                   </p>
                 </div>
                 {p.forecast ? (

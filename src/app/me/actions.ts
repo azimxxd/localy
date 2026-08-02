@@ -9,8 +9,9 @@
  */
 
 import { getRepo } from '@/lib/repo';
-import { getCustomerSessionId } from '@/lib/auth';
+import { destroyCustomerSession, getCustomerSessionId } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import type { NotificationChannel } from '@/lib/types';
 
 export async function rotateToken(customerId: string): Promise<string> {
@@ -46,4 +47,9 @@ export async function updateMyConsent(businessId: string, channel: NotificationC
   const channels = enabled ? [...new Set([...membership.consentChannels, channel])] : membership.consentChannels.filter((item) => item !== channel);
   await repo.updateConsent(businessId, customerId, channels);
   revalidatePath(`/me/${businessId}`);
+}
+
+export async function logoutCustomer(): Promise<never> {
+  await destroyCustomerSession();
+  redirect('/discover');
 }

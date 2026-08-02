@@ -2,7 +2,6 @@ import Link from 'next/link';
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 import { Badge, Card, btnClass } from '@/components/ui/kit';
 import { requireSession } from '@/lib/auth';
-import { getActiveBusiness } from '@/lib/demo';
 import { getRepo } from '@/lib/repo';
 import type { BusinessGoal } from '@/lib/types';
 
@@ -21,10 +20,10 @@ const GOAL_LABELS: Record<BusinessGoal, string> = {
 export default async function OnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ done?: string }>;
+  searchParams: Promise<{ done?: string; businessId?: string }>;
 }) {
-  await requireSession(['owner']);
-  const { done } = await searchParams;
+  const session = await requireSession(['owner']);
+  const { done, businessId } = await searchParams;
 
   if (done !== '1') {
     return (
@@ -42,7 +41,16 @@ export default async function OnboardingPage({
   }
 
   const repo = await getRepo();
-  const business = await getActiveBusiness();
+  const business = businessId && businessId === session.businessId ? await repo.getBusiness(businessId) : null;
+  if (!business) {
+    return (
+      <main className="mx-auto max-w-xl px-5 py-16 text-center">
+        <h1 className="text-2xl font-bold text-ink">Не удалось открыть созданный бизнес</h1>
+        <p className="mt-2 text-sm text-ink-soft">Вернитесь в кабинет или повторите создание.</p>
+        <Link href="/dashboard" className={btnClass('primary', 'mt-5')}>В кабинет</Link>
+      </main>
+    );
+  }
   const [plan, tools] = await Promise.all([repo.getGrowthPlan(business.id), repo.listTools()]);
   const toolTitle = (id: string) => tools.find((tool) => tool.id === id)?.title ?? id;
 

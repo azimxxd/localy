@@ -14,6 +14,7 @@
  *  - есть завершённая акция с полной воронкой — аналитике есть что показать
  */
 
+import { randomBytes, scryptSync } from 'node:crypto';
 import { forecastPromo } from '@/lib/engine';
 import type {
   ActivityLogEntry,
@@ -142,8 +143,8 @@ type ToolSeed = [
 const TOOL_SEEDS: ToolSeed[] = [
   // маркетинг
   ['tool_promo_builder', 'Конструктор акций', 'Соберите акцию за минуту и увидьте прогноз выручки до запуска', 'marketing', 'module', [], 5, 'megaphone'],
-  ['tool_campaigns', 'Рассылки клиентам', 'Отправьте предложение выбранному сегменту в Telegram, SMS или email', 'marketing', 'module', [], 5, 'send'],
-  ['tool_birthday', 'Поздравления с днём рождения', 'Автоматический подарок за неделю до дня рождения клиента', 'marketing', 'automation', [], 4, 'gift'],
+  ['tool_campaigns', 'Рассылки клиентам', 'Подготовьте предложение для сегмента, проверьте согласия и лимиты канала', 'marketing', 'module', [], 5, 'send'],
+  ['tool_birthday', 'Поздравления с днём рождения', 'Найдите клиентов с ближайшим днём рождения и подготовьте подарок', 'marketing', 'automation', [], 4, 'gift'],
   ['tool_referral', 'Приведи друга', 'Клиент получает бонусы за каждого приведённого знакомого', 'marketing', 'module', ['coffee', 'barber', 'beauty'], 4, 'users'],
   ['tool_site', 'Мини-сайт заведения', 'Страница с услугами, акциями и записью — без программиста', 'marketing', 'module', [], 4, 'globe'],
   ['tool_qr_poster', 'QR-плакат на кассу', 'Готовый макет: клиент сканирует и вступает в программу за 10 секунд', 'marketing', 'template', [], 4, 'qr-code'],
@@ -152,7 +153,7 @@ const TOOL_SEEDS: ToolSeed[] = [
   // продажи
   ['tool_pos', 'Касса', 'Пробейте покупку по QR клиента — бонусы начислятся сами', 'sales', 'module', [], 5, 'credit-card'],
   ['tool_item_promo', 'Акция на товар', 'Продвиньте конкретную позицию тем, кто её уже покупал', 'sales', 'module', ['coffee', 'retail'], 3, 'tag'],
-  ['tool_upsell', 'Подсказки допродаж', 'Касса подсказывает, что предложить именно этому клиенту', 'sales', 'automation', ['coffee', 'retail'], 3, 'trending-up'],
+  ['tool_upsell', 'Подсказки допродаж', 'Найдите сочетания позиций в реальных чеках и соберите комбо', 'sales', 'automation', ['coffee', 'retail'], 3, 'trending-up'],
   ['tool_bookings', 'Онлайн-запись', 'Клиент записывается сам, вы видите расписание', 'sales', 'module', ['barber', 'beauty', 'repair'], 4, 'calendar'],
   ['tool_deposits', 'Абонементы и сертификаты', 'Продавайте пакеты услуг и подарочные сертификаты', 'sales', 'module', ['beauty', 'barber'], 3, 'wallet'],
   ['tool_avg_check', 'Рост среднего чека', 'Комбо-предложения тем, кто берёт только одну позицию', 'sales', 'module', [], 3, 'arrow-up-right'],
@@ -162,9 +163,9 @@ const TOOL_SEEDS: ToolSeed[] = [
   ['tool_crm', 'Клиентская база', 'Карточка каждого клиента: визиты, чек, любимые позиции', 'retention', 'module', [], 5, 'contact'],
   ['tool_segments', 'Автосегменты', 'Система сама делит базу на 13 групп и держит их актуальными', 'retention', 'automation', [], 5, 'layers'],
   ['tool_winback', 'Возврат ушедших', 'Находит тех, кто пропал, и предлагает повод вернуться', 'retention', 'automation', [], 5, 'undo'],
-  ['tool_expiring', 'Напоминание о бонусах', 'Пишем клиенту, пока бонусы не сгорели — он приходит их потратить', 'retention', 'automation', [], 4, 'clock'],
+  ['tool_expiring', 'Напоминание о бонусах', 'Выберите клиентов со сгорающими бонусами и подготовьте сообщение', 'retention', 'automation', [], 4, 'clock'],
   ['tool_return_reward', 'Награда за возврат', 'Скидка на второй визит, чтобы новый клиент стал постоянным', 'retention', 'module', [], 4, 'repeat'],
-  ['tool_personal', 'Персональные предложения', 'Предложение под привычки конкретного человека', 'retention', 'automation', [], 4, 'user-check'],
+  ['tool_personal', 'Персональные предложения', 'Получите приоритетный список клиентов и подходящий повод обратиться', 'retention', 'automation', [], 4, 'user-check'],
 
   // аналитика
   ['tool_dashboard', 'Аналитика продаж', 'Выручка, визиты, средний чек — по дням и неделям', 'analytics', 'module', [], 5, 'bar-chart'],
@@ -178,7 +179,7 @@ const TOOL_SEEDS: ToolSeed[] = [
   ['tool_recommendations', 'Автоподсказки', 'Платформа сама говорит, что сделать сегодня', 'automation', 'automation', [], 5, 'lightbulb'],
   ['tool_schedule', 'Планировщик акций', 'Акции запускаются и завершаются по расписанию', 'automation', 'automation', [], 3, 'timer'],
   ['tool_roles', 'Роли сотрудников', 'Кассир видит только кассу, маркетолог — только акции', 'automation', 'module', [], 3, 'shield'],
-  ['tool_notify', 'Маршрут уведомлений', 'Сообщение уходит в тот канал, где клиент дал согласие', 'automation', 'automation', [], 3, 'bell'],
+  ['tool_notify', 'Маршрут уведомлений', 'Показывает доступную аудиторию по каждому каналу с учётом согласий', 'automation', 'automation', [], 3, 'bell'],
   ['tool_antispam', 'Защита от спама', 'Не больше четырёх сообщений клиенту в месяц', 'automation', 'automation', [], 4, 'shield-check'],
 ];
 
@@ -716,6 +717,7 @@ export function generateSeed(nowInput?: Date): SeedData {
       instagram: b.slug,
       primaryColor: b.brandColor,
       fontStyle: 'clean',
+      catalogTitle: b.typeCode === 'coffee' ? 'Меню' : b.typeCode === 'flower' ? 'Каталог букетов' : b.typeCode === 'retail' ? 'Каталог товаров' : 'Услуги и цены',
       catalog: ITEMS[b.typeCode].map((title, index) => ({ id: `item_${b.slug}_${index + 1}`, title, description: index === 0 ? 'Популярная позиция' : '', category: b.typeCode === 'coffee' ? 'Меню' : 'Основное', price: Math.max(500, Math.round((b.avgCheck * (0.45 + index * 0.08)) / 100) * 100), imageUrl: index < 3 ? `/demo/${b.typeCode}-cover.svg` : null, active: true })),
       sections: [
         { kind: 'hero', enabled: true, title: b.name, body: `${b.city}. Приходите — и копите бонусы с первого визита.` },
@@ -905,8 +907,12 @@ export function generateSeed(nowInput?: Date): SeedData {
 
   const primaryBusinessId = businesses[0]?.id ?? null;
   const primaryStaff = staff.filter((item) => item.businessId === primaryBusinessId);
-  // Пароль всех демонстрационных аккаунтов: Localy2026.
-  const passwordHash = 'sha256:a2b5365e905702d9c7d18398af98a3f337e039571f8d55f95ccbffc68af14575';
+  const demoPassword = process.env.LOCALY_DEMO_PASSWORD || 'Localy2026';
+  if ((process.env.RAILWAY_ENVIRONMENT || process.env.VERCEL_ENV === 'production') && !process.env.LOCALY_DEMO_PASSWORD) {
+    throw new Error('Для production seed задайте LOCALY_DEMO_PASSWORD');
+  }
+  const passwordSalt = randomBytes(16);
+  const passwordHash = `scrypt:${passwordSalt.toString('base64url')}:${scryptSync(demoPassword, passwordSalt, 64).toString('base64url')}`;
   const user = (
     id: string,
     login: string,

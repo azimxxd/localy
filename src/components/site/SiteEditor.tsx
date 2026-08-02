@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useMemo, useState, useTransition, type CSSProperties } from 'react';
 import { saveBusinessSite, type SiteEditorInput } from '@/app/(app)/dashboard/site/actions';
 import { Badge, Button, Card, TextInput } from '@/components/ui/kit';
-import { kzt } from '@/lib/format';
-import type { CatalogItem, SiteConfig, SiteSection, Template } from '@/lib/types';
+import { kzt, num } from '@/lib/format';
+import { accessibleBrandColor, brandOnDarkColor, contrastTextColor } from '@/lib/site-theme';
+import type { CatalogItem, LoyaltyConfig, SiteConfig, SiteSection, Template } from '@/lib/types';
 
 const TEMPLATE_ACCENT: Record<string, { label: string; art: string }> = {
   tpl_site_coffee: { label: 'Кофейня', art: "  ( (\\n   ) )\\n........\\n|      |]\\n\\\\      /\\n  ----" },
@@ -15,42 +16,53 @@ const TEMPLATE_ACCENT: Record<string, { label: string; art: string }> = {
   tpl_site_repair: { label: 'Сервис', art: "---[====]---\\n    ||\\n   /__\\\\" },
 };
 
-function Preview({ value }: { value: SiteEditorInput }) {
+const SITE_FONT_CLASS: Record<SiteEditorInput['fontStyle'], string> = {
+  clean: '[font-family:Inter,ui-sans-serif,system-ui,sans-serif]',
+  editorial: 'font-display',
+  friendly: 'font-sans',
+};
+
+function Preview({ value, businessCity, loyalty }: { value: SiteEditorInput; businessCity: string; loyalty: LoyaltyConfig }) {
   const theme = TEMPLATE_ACCENT[value.templateId] ?? TEMPLATE_ACCENT.tpl_site_coffee;
   const enabled = value.sections.filter((section) => section.enabled);
+  const catalog = value.catalog.filter((item) => item.active);
+  const readableBrand = accessibleBrandColor(value.primaryColor);
+  const heroBrand = value.coverUrl ? brandOnDarkColor(value.primaryColor) : readableBrand;
+  const socialLabels = value.socials.split(',').map((item) => item.split(':')[0].trim()).filter(Boolean);
   return (
-    <div className="overflow-hidden border border-brand bg-[#080c05] text-ink">
-      <div className="border-b border-line px-4 py-2 text-xs text-ink-soft">● ● ● &nbsp; localy.site/preview</div>
-      <div className="relative bg-cover bg-center px-7 py-8 text-center" style={value.coverUrl ? { backgroundImage: `linear-gradient(rgba(8,12,5,.86),rgba(8,12,5,.94)),url(${value.coverUrl})` } : undefined}>
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">{theme.label}</p>
-        {value.logoUrl ? <div aria-label="Логотип" className="mx-auto my-5 h-20 w-20 border border-brand bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url(${value.logoUrl})` }} /> : <pre aria-hidden className="my-5 whitespace-pre font-mono text-sm leading-tight text-brand">{theme.art.replaceAll('\\n', '\n')}</pre>}
-        <h2 className="text-3xl font-bold uppercase text-brand">{value.name || 'Название бизнеса'}</h2>
-        <p className="mx-auto mt-2 max-w-md text-sm text-ink-soft">{value.description || 'Кратко расскажите, почему к вам стоит прийти.'}</p>
-        <button type="button" className="mt-5 border border-brand px-4 py-2 text-sm font-semibold text-brand">[ Получить бонусную карту ]</button>
+    <div data-site-preview className={`overflow-hidden border border-line bg-canvas text-ink ${SITE_FONT_CLASS[value.fontStyle]}`} style={{ '--color-brand': readableBrand } as CSSProperties}>
+      <div className="border-b border-line bg-surface px-4 py-2 text-xs text-ink-soft">● ● ● &nbsp; localy.site/preview</div>
+      <div data-site-preview-hero className="relative border-b bg-surface bg-cover bg-center px-7 py-10 text-center" style={{ ...(value.coverUrl ? { backgroundImage: `linear-gradient(rgba(8,12,5,.78),rgba(8,12,5,.9)),url(${value.coverUrl})` } : {}), borderColor: value.primaryColor, boxShadow: `inset 0 5px 0 ${value.primaryColor}` }}>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: heroBrand }}>{theme.label}</p>
+        {value.logoUrl ? <div aria-label="Логотип" className="mx-auto my-5 h-20 w-20 border bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url(${value.logoUrl})`, borderColor: heroBrand }} /> : <pre aria-hidden className="my-5 whitespace-pre font-mono text-sm leading-tight" style={{ color: heroBrand }}>{theme.art.replaceAll('\\n', '\n')}</pre>}
+        <h2 className="text-3xl font-bold uppercase" style={{ color: heroBrand }}>{value.name || 'Название бизнеса'}</h2>
+        <p className={`mt-2 text-sm ${value.coverUrl ? 'text-[#eee7da]' : 'text-ink-soft'}`}>{businessCity}</p>
+        <p className={`mx-auto mt-2 max-w-md text-sm ${value.coverUrl ? 'text-[#eee7da]' : 'text-ink-soft'}`}>{value.description || 'Кратко расскажите, почему к вам стоит прийти.'}</p>
+        <button type="button" className="mt-5 border px-4 py-2 text-sm font-semibold uppercase" style={{ backgroundColor: value.primaryColor, borderColor: value.primaryColor, color: contrastTextColor(value.primaryColor) }}>Получить бонусную карту</button>
       </div>
-      <div className="space-y-5 p-6">
-        {value.catalog.filter((item) => item.active).length > 0 ? (
-          <section>
-            <p className="mb-2 text-sm font-semibold text-ink">{value.templateId === 'tpl_site_coffee' ? 'Меню' : 'Каталог'}</p>
+      <div className="space-y-5 bg-surface p-6">
+        <section className="border border-line p-4"><p className="font-semibold text-ink">Бонусная программа</p><p className="mt-1 text-sm text-ink-soft">{Math.round(loyalty.pointsPerCurrency * 100)}% бонусами с каждой покупки. Накопите {num(loyalty.rewardThreshold)} — получите «{loyalty.rewardTitle}».</p></section>
+        {catalog.length > 0 ? (
+          <section data-site-preview-catalog>
+            <p className="mb-2 text-sm font-semibold uppercase text-brand">{value.catalogTitle || 'Каталог'}</p>
             <div className="grid gap-2 sm:grid-cols-2">
-              {value.catalog.filter((item) => item.active).slice(0, 6).map((item) => (
-                <div key={item.id} className="flex justify-between gap-2 border-b border-dashed border-line p-3">
-                  <span className="text-sm text-ink">{item.title}</span>
-                  <strong className="text-sm text-ink">{kzt(item.price)}</strong>
+              {catalog.map((item) => (
+                <div key={item.id} className="flex items-start justify-between gap-2 border border-line p-3">
+                  <div><p className="text-sm font-medium text-ink">{item.title}</p><p className="text-xs uppercase text-brand">{item.category || 'Без категории'}</p>{item.description ? <p className="mt-1 text-xs text-ink-soft">{item.description}</p> : null}</div>
+                  <strong className="shrink-0 text-sm text-ink">{kzt(item.price)}</strong>
                 </div>
               ))}
             </div>
           </section>
         ) : null}
-        {enabled.filter((section) => !['hero', 'services'].includes(section.kind)).map((section) => (
-          <section key={section.kind}>
+        {value.galleryUrls.length ? <section><p className="mb-2 font-semibold uppercase text-brand">Фото</p><div className="grid grid-cols-3 gap-2">{value.galleryUrls.map((url, index) => <div key={`${url.slice(0, 24)}_${index}`} className="aspect-video border border-line bg-cover bg-center" style={{ backgroundImage: `url(${url})` }} />)}</div></section> : null}
+        {enabled.filter((section) => !['hero', 'services', 'promos', 'loyalty', 'contacts', 'booking', 'lead'].includes(section.kind)).map((section) => (
+          <section key={section.kind} className="border border-line p-4">
             <p className="font-semibold text-ink">{section.title}</p>
             <p className="mt-1 whitespace-pre-line text-sm text-ink-soft">{section.body}</p>
           </section>
         ))}
-        <div className="border-t border-line pt-4 text-xs text-ink-soft">
-          {value.workHours} {value.phone ? `· ${value.phone}` : ''}
-        </div>
+        <div className="border border-line p-4 text-xs text-ink-soft"><p className="font-semibold text-ink">График и связь</p><p>{value.workHours} {value.phone ? `· ${value.phone}` : ''}</p>{socialLabels.length ? <p className="mt-1 text-brand">{socialLabels.join(' · ')}</p> : null}</div>
       </div>
     </div>
   );
@@ -59,11 +71,15 @@ function Preview({ value }: { value: SiteEditorInput }) {
 export default function SiteEditor({
   businessId,
   businessName,
+  businessCity,
+  loyalty,
   initial,
   templates,
 }: {
   businessId: string;
   businessName: string;
+  businessCity: string;
+  loyalty: LoyaltyConfig;
   initial: SiteConfig;
   templates: Template[];
 }) {
@@ -80,10 +96,9 @@ export default function SiteEditor({
     primaryColor: initial.primaryColor ?? '#2f6f5e',
     phone: initial.phone ?? '',
     workHours: initial.workHours ?? 'Ежедневно, 08:00–22:00',
-    telegram: initial.telegram ?? '',
-    whatsapp: initial.whatsapp ?? '',
-    instagram: initial.instagram ?? '',
+    socials: (initial.socials ?? [initial.instagram && `Instagram: ${initial.instagram}`, initial.whatsapp && `WhatsApp: ${initial.whatsapp}`, initial.telegram && `Telegram: ${initial.telegram}`].filter((item): item is string => Boolean(item))).join(', '),
     fontStyle: initial.fontStyle ?? 'clean',
+    catalogTitle: initial.catalogTitle ?? initial.sections.find((section) => section.kind === 'services')?.title ?? (initial.templateId === 'tpl_site_coffee' ? 'Меню' : 'Каталог'),
     sections: initial.sections,
     catalog: initial.catalog ?? [],
     published: initial.published,
@@ -124,9 +139,10 @@ export default function SiteEditor({
       <div className="space-y-4">
         <Card className="space-y-4">
           <div><h2 className="font-semibold text-ink">Основа сайта</h2><p className="text-sm text-ink-soft">Изменения сразу видны в предпросмотре.</p></div>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-3">
             <TextInput label="Название" value={value.name} onChange={(event) => patch('name', event.target.value)} />
-                <label className="block"><span className="mb-1 block text-sm font-medium text-ink">Цвет клиентского сайта</span><input type="color" value={value.primaryColor} onChange={(event) => patch('primaryColor', event.target.value)} className="h-11 w-full border border-line bg-surface p-1" /></label>
+            <label className="block"><span className="mb-1 block text-sm font-medium text-ink">Фирменный цвет</span><input type="color" value={value.primaryColor} onChange={(event) => patch('primaryColor', event.target.value)} className="h-11 w-full border border-line bg-surface p-1" /><span className="mt-1 block text-xs text-ink-soft">Текст автоматически станет контрастным.</span></label>
+            <label className="block"><span className="mb-1 block text-sm font-medium text-ink">Шрифт сайта</span><select value={value.fontStyle} onChange={(event) => patch('fontStyle', event.target.value as SiteEditorInput['fontStyle'])} className="h-11 w-full border border-line bg-surface px-3"><option value="clean">Чистый</option><option value="editorial">Редакционный</option><option value="friendly">Дружелюбный</option></select></label>
           </div>
           <label className="block"><span className="mb-1 block text-sm font-medium text-ink">Короткое описание</span><textarea value={value.description} onChange={(event) => patch('description', event.target.value)} rows={3} className="w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 outline-none focus:border-brand" /></label>
           <div className="grid gap-2 md:grid-cols-2">
@@ -152,14 +168,14 @@ export default function SiteEditor({
 
         <details className="ascii-details border border-line bg-surface p-5">
           <summary className="font-semibold uppercase tracking-wide text-ink">Каталог ({value.catalog.length})</summary>
-          <div className="mt-4 flex items-center justify-between border-t border-line pt-4"><p className="text-sm text-ink-soft">Товары и услуги с реальными ценами.</p><Button type="button" variant="secondary" onClick={() => patch('catalog', [...value.catalog, { id: `item_${Date.now()}`, title: '', description: '', category: 'Основное', price: 0, active: true }])}>Добавить</Button></div>
+          <div className="mt-4 space-y-3 border-t border-line pt-4"><div className="flex items-end gap-3"><div className="min-w-0 flex-1"><TextInput label="Заголовок каталога" value={value.catalogTitle} onChange={(event) => patch('catalogTitle', event.target.value)} hint="Меняет общий заголовок на сайте: например, «Меню» или «Услуги»." /></div><Button type="button" variant="secondary" onClick={() => patch('catalog', [...value.catalog, { id: `item_${Date.now()}`, title: '', description: '', category: 'Основное', price: 0, active: true }])}>Добавить</Button></div><p className="text-sm text-ink-soft">Категория ниже — это подпись и группа конкретного товара, а не заголовок всего блока.</p></div>
           {value.catalog.map((item, index) => (
             <div key={item.id} className="grid gap-2 rounded-xl border border-line p-3 md:grid-cols-[1fr_10rem_auto]">
-              <TextInput aria-label="Название позиции" value={item.title} onChange={(event) => patchItem(index, { title: event.target.value })} placeholder="Название" />
-              <TextInput aria-label="Цена" type="number" min="0" value={item.price} onChange={(event) => patchItem(index, { price: Number(event.target.value) })} />
+              <TextInput label="Название" aria-label="Название позиции" value={item.title} onChange={(event) => patchItem(index, { title: event.target.value })} placeholder="Название" />
+              <TextInput label="Цена, ₸" aria-label="Цена" type="number" min="0" value={item.price} onChange={(event) => patchItem(index, { price: Number(event.target.value) })} />
               <Button type="button" variant="ghost" onClick={() => patch('catalog', value.catalog.filter((_, itemIndex) => itemIndex !== index))}>Удалить</Button>
-              <TextInput aria-label="Категория" value={item.category} onChange={(event) => patchItem(index, { category: event.target.value })} placeholder="Категория" />
-              <div className="md:col-span-2"><TextInput aria-label="Описание" value={item.description} onChange={(event) => patchItem(index, { description: event.target.value })} placeholder="Короткое описание" /></div>
+              <TextInput label="Категория позиции" aria-label="Категория" value={item.category} onChange={(event) => patchItem(index, { category: event.target.value })} placeholder="Напитки, стрижки, букеты…" />
+              <div className="md:col-span-2"><TextInput label="Описание" aria-label="Описание" value={item.description} onChange={(event) => patchItem(index, { description: event.target.value })} placeholder="Короткое описание" /></div>
               <label className="flex items-center gap-2 text-xs uppercase text-ink-soft"><input type="checkbox" checked={item.active} onChange={(event) => patchItem(index, { active: event.target.checked })} /> показывать</label>
             </div>
           ))}
@@ -180,7 +196,7 @@ export default function SiteEditor({
         <details className="ascii-details border border-line bg-surface p-5">
           <summary className="font-semibold uppercase tracking-wide text-ink">Контакты</summary>
           <div className="mt-4 border-t border-line pt-4">
-          <div className="grid gap-3 md:grid-cols-2"><TextInput label="Телефон" value={value.phone} onChange={(event) => patch('phone', event.target.value)} /><TextInput label="График" value={value.workHours} onChange={(event) => patch('workHours', event.target.value)} /><TextInput label="Telegram" value={value.telegram} onChange={(event) => patch('telegram', event.target.value)} /><TextInput label="WhatsApp" value={value.whatsapp} onChange={(event) => patch('whatsapp', event.target.value)} /><TextInput label="Instagram" value={value.instagram} onChange={(event) => patch('instagram', event.target.value)} /></div>
+          <div className="grid gap-3 md:grid-cols-2"><TextInput label="Телефон" value={value.phone} onChange={(event) => patch('phone', event.target.value)} /><TextInput label="График" value={value.workHours} onChange={(event) => patch('workHours', event.target.value)} /><div className="md:col-span-2"><TextInput label="Соцсети и площадки" value={value.socials} onChange={(event) => patch('socials', event.target.value)} hint="Через запятую: Instagram: @name, WhatsApp: +7…, Telegram: @name, TikTok, 2GIS" /></div></div>
           </div>
         </details>
       </div>
@@ -188,7 +204,7 @@ export default function SiteEditor({
       <div className="xl:sticky xl:top-6 xl:self-start">
         <div className="mb-3 flex items-center justify-between"><div><p className="font-semibold text-ink">Живой предпросмотр</p><Badge tone={value.published ? 'success' : 'muted'}>{value.published ? 'Опубликован' : 'Черновик'}</Badge></div><div className="flex gap-2"><Button type="button" variant="secondary" disabled={pending} onClick={() => save(false)}>Сохранить</Button><Button type="button" disabled={pending} onClick={() => save(true)}>Опубликовать</Button></div></div>
         {message ? <p role="status" className="mb-3 rounded-xl bg-ok-soft px-3 py-2 text-sm text-ok">{message}</p> : null}
-        <Preview value={value} />
+        <Preview value={value} businessCity={businessCity} loyalty={loyalty} />
       </div>
     </div>
   );

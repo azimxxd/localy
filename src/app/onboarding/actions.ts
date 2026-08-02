@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { requireSession } from '@/lib/auth';
+import { BUSINESS_PRESETS } from '@/lib/business-presets';
 import { getRepo } from '@/lib/repo';
 import type { BusinessGoal, BusinessTypeCode, SiteSection } from '@/lib/types';
 
@@ -47,6 +48,13 @@ function list(formData: FormData, name: string): string[] {
     .filter(Boolean);
 }
 
+function socialValue(values: string[], platform: 'instagram' | 'whatsapp' | 'telegram'): string {
+  const match = values.find((value) => value.toLowerCase().includes(platform));
+  if (!match) return '';
+  const withoutLabel = match.replace(new RegExp(`^${platform}\\s*[:—-]?\\s*`, 'i'), '').trim();
+  return withoutLabel || platform;
+}
+
 export async function completeOnboarding(
   _state: OnboardingState,
   formData: FormData,
@@ -61,7 +69,7 @@ export async function completeOnboarding(
   const branchCount = Number(formData.get('branchCount'));
   const repeatVisitDays = Number(formData.get('repeatVisitDays'));
   const offerings = list(formData, 'offerings');
-  const currentTools = list(formData, 'currentTools');
+  const currentTools = list(formData, 'socials');
   const goals = list(formData, 'goals').filter((goal): goal is BusinessGoal =>
     ALLOWED_GOALS.has(goal as BusinessGoal),
   );
@@ -86,6 +94,7 @@ export async function completeOnboarding(
     ? `${baseSlug}-${Date.now().toString(36).slice(-4)}`
     : baseSlug;
 
+  const preset = BUSINESS_PRESETS[typeCode];
   const business = await repo.createBusiness({
     slug,
     name,
@@ -101,7 +110,7 @@ export async function completeOnboarding(
     avgCheck: Math.round(avgCheck),
     goals,
     plan: 'basic',
-    brandColor: '#2f6f5e',
+    brandColor: preset.brandColor,
     logoUrl,
   });
 
@@ -118,14 +127,7 @@ export async function completeOnboarding(
     });
   }
 
-  const rewardTitle =
-    typeCode === 'coffee'
-      ? 'Шестой напиток бесплатно'
-      : typeCode === 'barber'
-        ? 'Скидка 20% на следующую стрижку'
-        : typeCode === 'flower'
-          ? 'Подарок к шестому заказу'
-        : 'Подарок постоянному клиенту';
+  const rewardTitle = preset.rewardTitle;
   await repo.updateLoyaltyConfig(business.id, {
     pointsPerCurrency: 0.05,
     rewardThreshold: Math.max(500, Math.round(avgCheck * 0.4)),
@@ -141,7 +143,7 @@ export async function completeOnboarding(
   const sections: SiteSection[] = [
     { kind: 'hero', enabled: true, title: name, body: `${city}. Копите бонусы с первого визита.` },
     { kind: 'about', enabled: true, title: 'О нас', body: 'Локальный бизнес, где вас помнят по имени.' },
-    { kind: 'services', enabled: true, title: typeCode === 'coffee' ? 'Меню' : 'Товары и услуги', body: offerings.join(', ') },
+    { kind: 'services', enabled: true, title: preset.catalogTitle, body: offerings.join(', ') },
     { kind: 'promos', enabled: true, title: 'Акции', body: 'Актуальные предложения для гостей.' },
     { kind: 'loyalty', enabled: true, title: 'Бонусная программа', body: `5% бонусами. Награда: ${rewardTitle}.` },
     { kind: 'booking', enabled: ['barber', 'beauty', 'repair'].includes(typeCode), title: 'Онлайн-запись', body: 'Выберите услугу и удобное время.' },
@@ -155,14 +157,19 @@ export async function completeOnboarding(
     description: `${name} — ${offerings.slice(0, 3).join(', ')}.`,
     logoUrl,
     phone: '',
-    workHours: 'Ежедневно, 08:00–22:00',
-    primaryColor: '#2f6f5e',
+    workHours: preset.workHours,
+    telegram: socialValue(currentTools, 'telegram'),
+    whatsapp: socialValue(currentTools, 'whatsapp'),
+    instagram: socialValue(currentTools, 'instagram'),
+    socials: currentTools,
+    primaryColor: preset.brandColor,
     fontStyle: 'clean',
+    catalogTitle: preset.catalogTitle,
     catalog: offerings.map((title, index) => ({
       id: `item_${index + 1}`,
       title,
       description: '',
-      category: typeCode === 'coffee' ? 'Меню' : 'Основное',
+      category: preset.catalogCategory,
       price: Math.max(500, Math.round(avgCheck * (0.45 + index * 0.08) / 100) * 100),
       imageUrl: null,
       active: true,
@@ -174,5 +181,5 @@ export async function completeOnboarding(
   const owner = (await repo.listStaff(business.id)).find((staff) => staff.role === 'owner');
   await repo.updateUser(session.userId, { businessId: business.id, staffId: owner?.id ?? null });
 
-  redirect('/onboarding?done=1');
+  redirect(`/onboarding?done=1&businessId=${encodeURIComponent(business.id)}`);
 }

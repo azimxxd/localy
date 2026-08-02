@@ -49,10 +49,10 @@ export default function HomePage() {
             Заведения
           </Link>
           <Link href="/me" className={btnClass('ghost', 'hidden sm:inline-flex')}>
-            Я клиент
+            Для клиентов
           </Link>
           <Link href="/login" className={btnClass('secondary')}>
-            Войти
+            Вход для бизнеса
           </Link>
         </nav>
       </header>
@@ -76,13 +76,13 @@ export default function HomePage() {
 
           <div className="mt-9 flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:justify-center">
             <Link href="/onboarding" className={btnClass('primary', 'px-7 py-3.5 text-base')}>
-              Найти клиентов
+              Подключить бизнес
             </Link>
             <Link
-              href="/dashboard/promos/new"
+              href="/login"
               className={btnClass('secondary', 'px-7 py-3.5 text-base')}
             >
-              Создать акцию
+              Демо для бизнеса
             </Link>
           </div>
 

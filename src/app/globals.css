@@ -152,6 +152,52 @@ h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: 0.
 
 @media (max-width: 767px) {
   body { background-image: none; }
+
+  /* На телефоне оставляем больше воздуха между смысловыми блоками, но
+     убираем декоративную рамку-в-рамке: она дробила каждую строку текста. */
+  .public-site .ascii-panel::before { display: none; }
+  .public-site .ascii-panel { border-color: rgba(138, 98, 32, .24); }
+  .public-site h2 { letter-spacing: .06em; }
+
+  .mobile-clamp {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .public-card-rail {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(78vw, 1fr);
+    grid-template-columns: none;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: inline mandatory;
+    scrollbar-width: none;
+    margin-inline: -1rem;
+    padding-inline: 1rem;
+    padding-bottom: .3rem;
+  }
+  .public-card-rail::-webkit-scrollbar,
+  .public-jump-nav::-webkit-scrollbar { display: none; }
+  .public-card-rail > * { scroll-snap-align: start; }
+
+  .public-jump-nav { scrollbar-width: none; }
+  .public-jump-nav a {
+    flex: 0 0 auto;
+    border: 1px solid #ded3bf;
+    padding: .45rem .75rem;
+    color: #2b2620;
+    background: #faf6ec;
+  }
+
+  .public-site input,
+  .public-site select,
+  .public-site textarea,
+  .public-site button { min-height: 44px; }
+
+  .public-site section[id] { scroll-margin-top: 4.5rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -27,7 +27,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         role={session.role}
         userName={session.name}
       />
-      <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 md:py-7">{children}</main>
+      <main className="min-w-0 flex-1 px-4 pb-24 pt-5 sm:px-6 md:py-7">{children}</main>
     </div>
   );
 }

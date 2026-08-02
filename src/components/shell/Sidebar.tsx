@@ -55,17 +55,40 @@ export default function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const mainItems = role === 'platform_admin' ? PLATFORM_NAV : NAV.filter((item) => item.roles.includes(role));
+  const settingsItems = role === 'platform_admin' ? [] : SETTINGS_NAV.filter((item) => item.roles.includes(role));
+  const preferredMobile = role === 'platform_admin'
+    ? ['/admin', '/admin/stats']
+    : role === 'marketer'
+      ? ['/dashboard', '/dashboard/crm', '/dashboard/promos', '/dashboard/campaigns', '/dashboard/analytics']
+      : role === 'manager'
+        ? ['/dashboard', '/dashboard/crm', '/dashboard/promos', '/dashboard/bookings', '/dashboard/qr']
+        : ['/dashboard', '/dashboard/crm', '/dashboard/promos', '/dashboard/site', '/tools'];
+  const mobileItems = [...mainItems, ...settingsItems].filter((item) => preferredMobile.includes(item.href)).sort((a, b) => preferredMobile.indexOf(a.href) - preferredMobile.indexOf(b.href));
+  const isActive = (href: string) => href === '/dashboard' || href === '/admin' ? pathname === href : pathname.startsWith(href);
+  const closeMobileMenu = (target: HTMLElement) => { const details = target.closest('details'); if (details) details.open = false; };
 
   return (
-    <aside className="flex w-full shrink-0 flex-col gap-5 border-b border-line bg-surface px-4 py-4 md:sticky md:top-0 md:h-dvh md:w-64 md:border-b-0 md:border-r md:py-6">
-      <div className="px-2">
+    <aside className="sticky top-0 z-40 flex w-full shrink-0 flex-col gap-3 border-b border-line bg-surface/95 px-4 py-3 backdrop-blur md:static md:min-h-dvh md:w-64 md:self-stretch md:gap-5 md:border-b-0 md:border-r md:bg-surface md:py-6">
+      <div className="flex items-center justify-between gap-3 px-1 md:block md:px-2">
+        <div>
         <Link href="/" className="font-display text-xl uppercase tracking-[0.24em] text-brand">
           LOCALY
         </Link>
-        <p className="ascii-kicker mt-1">Кабинет бизнеса · v1.0</p>
+        <p className="hidden md:mt-1 md:block md:text-xs md:uppercase md:tracking-[0.14em] md:text-ink-soft">Кабинет бизнеса</p>
+        </div>
+        <details className="relative md:hidden">
+          <summary className="list-none border border-line px-3 py-2 text-sm font-semibold text-ink">Все разделы</summary>
+          <div className="fixed inset-x-3 top-16 z-50 max-h-[72vh] overflow-y-auto border border-line bg-surface p-3 shadow-xl">
+            <div className="mb-3 flex items-center justify-between border-b border-line pb-2"><div><p className="font-semibold text-ink">{userName}</p><p className="text-xs text-ink-soft">Навигация и настройки</p></div><span className="text-xs text-ink-soft">Выберите раздел</span></div>
+            <nav className="grid grid-cols-2 gap-2">{[...mainItems, ...settingsItems].map((item) => <Link key={item.href} href={item.href} onClick={(event) => closeMobileMenu(event.currentTarget)} className={cn('border px-3 py-3 text-sm', isActive(item.href) ? 'border-brand bg-brand-soft text-brand' : 'border-line text-ink')}>{item.label}</Link>)}</nav>
+            {role !== 'platform_admin' ? <Link href="/pos" onClick={(event) => closeMobileMenu(event.currentTarget)} className="mt-3 block border border-brand px-3 py-3 text-center text-sm font-semibold text-brand">Открыть кассу</Link> : null}
+            <form action={logoutAction} className="mt-3 border-t border-line pt-3"><button className="w-full px-3 py-2 text-left text-sm text-ink-soft">Выйти из кабинета</button></form>
+          </div>
+        </details>
       </div>
 
-      {role !== 'platform_admin' ? <select
+      {role !== 'platform_admin' && businesses.length > 1 ? <select
         value={activeId}
         disabled={pending}
         onChange={(e) => {
@@ -76,21 +99,18 @@ export default function Sidebar({
           });
         }}
         aria-label="Выбрать бизнес"
-        className="border border-line bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+        className="w-full border border-line bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-brand"
       >
         {businesses.map((b) => (
           <option key={b.id} value={b.id}>
             {b.name}
           </option>
         ))}
-      </select> : null}
+      </select> : role !== 'platform_admin' ? <p className="hidden truncate border border-line bg-canvas px-3 py-2 text-sm text-ink md:block">{businesses[0]?.name}</p> : null}
 
-      <nav aria-label="Основная навигация" className="flex gap-1 overflow-x-auto pb-1 md:flex-col md:overflow-visible md:pb-0">
-        {(role === 'platform_admin' ? PLATFORM_NAV : NAV.filter((item) => item.roles.includes(role))).map((item) => {
-          const active =
-            item.href === '/dashboard'
-              ? pathname === item.href
-              : pathname.startsWith(item.href);
+      <nav aria-label="Основная навигация" className="hidden gap-1 md:flex md:flex-col">
+        {mainItems.map((item) => {
+          const active = isActive(item.href);
           return (
             <Link
               key={item.href}
@@ -104,6 +124,10 @@ export default function Sidebar({
             </Link>
           );
         })}
+      </nav>
+
+      <nav aria-label="Быстрая мобильная навигация" className="fixed inset-x-0 bottom-0 z-50 grid border-t border-line bg-surface/95 px-2 pb-[max(.45rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur md:hidden" style={{ gridTemplateColumns: `repeat(${Math.max(1, mobileItems.length)}, minmax(0, 1fr))` }}>
+        {mobileItems.map((item) => <Link key={item.href} href={item.href} className={cn('min-w-0 border-t-2 px-1 py-2 text-center text-[11px] leading-tight', isActive(item.href) ? 'border-brand text-brand' : 'border-transparent text-ink-soft')}>{item.label.replace('Сайт бизнеса', 'Сайт')}</Link>)}
       </nav>
 
       {role !== 'platform_admin' ? <nav aria-label="Настройки" className="hidden flex-col gap-1 border-t border-line pt-4 md:flex">
@@ -125,20 +149,21 @@ export default function Sidebar({
         })}
       </nav> : null}
 
-      <div className="mt-auto hidden flex-col gap-1 border-t border-line pt-4 text-sm md:flex">
+      <div className="mt-auto hidden flex-col gap-2 border-t border-line pt-4 text-sm md:flex">
         {role !== 'platform_admin' ? <Link href="/pos" className="border border-brand px-3 py-2 text-center text-brand hover:bg-brand hover:text-canvas">
           Открыть кассу
         </Link> : null}
-        {role !== 'platform_admin' ? <Link href="/me" className="px-3 py-2 text-ink-soft hover:bg-canvas">
-          Кабинет клиента
-        </Link> : null}
-        <p className="truncate px-3 pt-2 text-xs font-medium text-ink">{userName}</p>
-        <p className="px-3 text-xs text-ink-soft">{role === 'platform_admin' ? 'Админ Localy' : role}</p>
-        <form action={logoutAction}>
-          <button className="w-full px-3 py-2 text-left text-ink-soft hover:bg-canvas">
-            Выйти
-          </button>
-        </form>
+        <div className="overflow-hidden border border-line bg-canvas">
+          <div className="px-3 py-2.5">
+            <p className="truncate text-xs font-medium text-ink">{userName}</p>
+            <p className="mt-1 text-xs text-ink-soft">{role === 'platform_admin' ? 'Адин Localy' : role}</p>
+          </div>
+          <form action={logoutAction} className="border-t border-line">
+            <button className="w-full px-3 py-2.5 text-left text-ink-soft hover:bg-surface hover:text-ink">
+              Выйти
+            </button>
+          </form>
+        </div>
       </div>
     </aside>
   );

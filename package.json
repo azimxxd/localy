@@ -1,12 +1,17 @@
 {
-  "name": "serpinbusiness",
+  "name": "localy",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "check:tools": "node scripts/check-tools.mjs",
     "smoke:e2e": "node scripts/e2e-smoke.mjs"
   },
   "dependencies": {
@@ -34,5 +39,9 @@
     "eslint-config-next": "16.2.12",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "postcss": "8.5.25",
+    "sharp": "0.35.3"
   }
 }

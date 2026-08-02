@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -25,7 +25,7 @@ async function ensureChrome() {
 async function ensureApp() {
   try { if ((await fetch(`${APP}/login`)).ok) return; } catch {}
   const port = new URL(APP).port || '3011';
-  appProcess = spawn('./node_modules/.bin/next', ['start', '-p', port], { cwd: process.cwd(), stdio: 'ignore', env: { ...process.env, LOCALY_DATA_FILE: join(testDataDir, 'localy.json') } });
+  appProcess = spawn('./node_modules/.bin/next', ['start', '-p', port], { cwd: process.cwd(), stdio: 'ignore', env: { ...process.env, LOCALY_DATA_FILE: join(testDataDir, 'localy.json'), LOCALY_SESSION_SECRET: 'localy-e2e-session-secret-at-least-32-characters', LOCALY_ALLOW_DEV_OTP: 'true', LOCALY_SECURE_COOKIES: 'false' } });
   for (let attempt = 0; attempt < 200; attempt += 1) {
     await sleep(100);
     try { if ((await fetch(`${APP}/login`)).ok) return; } catch {}
@@ -86,16 +86,26 @@ async function waitForPath(client, path) {
   throw new Error(`Ожидался переход на ${path}`);
 }
 
-async function waitForText(client, text) {
-  for (let attempt = 0; attempt < 120; attempt += 1) {
+async function waitForDifferentPath(client, previous) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
     await sleep(100);
-    const body = await evaluate(client, 'document.body.innerText');
-    if (body.toLocaleLowerCase('ru').includes(text.toLocaleLowerCase('ru'))) return;
+    const current = await evaluate(client, 'location.pathname');
+    if (current !== previous) return current;
   }
-  throw new Error(`На странице не появился текст: ${text}`);
+  throw new Error(`Ожидался переход с ${previous}`);
 }
 
-async function login(client, login, destination) {
+async function waitForText(client, text) {
+  let lastBody = '';
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    await sleep(100);
+    lastBody = await evaluate(client, 'document.body.innerText');
+    if (lastBody.toLocaleLowerCase('ru').includes(text.toLocaleLowerCase('ru'))) return;
+  }
+  throw new Error(`На странице не появился текст: ${text}; body=${lastBody.slice(-1200)}`);
+}
+
+async function login(client, login, destination, accountPassword = 'Localy2026') {
   await client.send('Network.clearBrowserCookies');
   await navigate(client, '/login');
   const submitted = await evaluate(client, `(() => {
@@ -105,7 +115,7 @@ async function login(client, login, destination) {
     if (!login || !password || !form) return false;
     const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
     set.call(login, ${JSON.stringify(login)}); login.dispatchEvent(new Event('input', { bubbles: true }));
-    set.call(password, 'Localy2026'); password.dispatchEvent(new Event('input', { bubbles: true }));
+    set.call(password, ${JSON.stringify(accountPassword)}); password.dispatchEvent(new Event('input', { bubbles: true }));
     form.requestSubmit(); return true;
   })()`);
   if (!submitted) throw new Error('Форма входа не найдена');
@@ -124,7 +134,14 @@ await ensureChrome();
 const client = await createClient();
 try {
   const results = [];
+  await navigate(client, '/');
+  await waitForText(client, 'Вход для бизнеса');
+  await waitForText(client, 'Для клиентов');
+  results.push('separate business/customer entry points');
   await login(client, 'owner@localy.kz', '/dashboard');
+  const businessShellText = await evaluate(client, 'document.body.innerText');
+  if (businessShellText.includes('Кабинет клиента') || businessShellText.includes('Мои карты')) throw new Error('Клиентская навигация попала в бизнес-панель');
+  results.push('business shell has no personal customer area');
   for (const [path, marker] of [
     ['/dashboard', 'Что хотите сделать?'],
     ['/dashboard/crm', 'Клиенты'],
@@ -134,13 +151,48 @@ try {
     ['/dashboard/analytics', 'Аналитика'],
     ['/dashboard/subscription', 'Тариф'],
   ]) { await assertPage(client, path, marker); results.push(`owner ${path}`); }
+  if (process.env.LOCALY_MOBILE_SCREENSHOT) {
+    await client.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    await navigate(client, '/dashboard');
+    const shot = await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    writeFileSync(process.env.LOCALY_MOBILE_SCREENSHOT, Buffer.from(shot.data, 'base64'));
+    await client.send('Emulation.clearDeviceMetricsOverride');
+  }
   await assertPage(client, '/dashboard/crm?activity=at_risk', 'Под риском'); results.push('activity segment');
 
+  await navigate(client, '/tools');
+  await waitForText(client, 'Рабочие модули и сценарии');
+  const socialToolReady = await evaluate(client, `(() => { const card = document.querySelector('[data-tool-id="tool_social"]'); if (!card) return false; const add = [...card.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('добавить в мои')); if (add) add.click(); return true; })()`);
+  if (!socialToolReady) throw new Error('Шаблоны соцсетей отсутствуют в каталоге');
+  for (let attempt = 0; attempt < 100; attempt += 1) { await sleep(100); if (await evaluate(client, `Boolean(document.querySelector('[data-tool-id="tool_social"] a[href="/tools/tool_social"]'))`)) break; }
+  const socialHref = await evaluate(client, `document.querySelector('[data-tool-id="tool_social"] a[href="/tools/tool_social"]')?.getAttribute('href')`);
+  if (socialHref !== '/tools/tool_social') throw new Error('Активация не открыла рабочий модуль соцсетей');
+  await assertPage(client, socialHref, 'Скопировать');
+  await assertPage(client, '/tools/tool_upsell', 'Подсказка');
+  results.push('tool catalog activation + social templates + data-driven upsell');
+
   await navigate(client, '/onboarding');
+  const expectedPresets = {
+    coffee: ['Капучино', '2500', '5', 'Instagram'],
+    barber: ['Мужская стрижка', '7000', '28', 'Telegram'],
+    beauty: ['Маникюр', '12000', '24', 'Instagram'],
+    flower: ['Авторский букет', '15000', '18', 'Telegram'],
+    retail: ['Худи', '10000', '16', 'TikTok'],
+    repair: ['Диагностика', '18000', '120', 'Telegram'],
+  };
+  for (const [typeCode, expected] of Object.entries(expectedPresets)) {
+    await evaluate(client, `(() => { const select = document.querySelector('select[name="typeCode"]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(select, ${JSON.stringify(typeCode)}); select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await sleep(80);
+    const preset = await evaluate(client, `(() => { const form = document.querySelector('form'); return [form.elements.namedItem('offerings').value, form.elements.namedItem('avgCheck').value, form.elements.namedItem('repeatVisitDays').value, form.elements.namedItem('socials').value]; })()`);
+    if (!expected.every((value, index) => preset[index].includes(value))) throw new Error(`Неверный пресет ${typeCode}: ${JSON.stringify(preset)}`);
+  }
+  await evaluate(client, `(() => { const select = document.querySelector('select[name="typeCode"]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(select, 'barber'); select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await sleep(80);
+  results.push('all six category presets');
   const onboardingSubmitted = await evaluate(client, `(() => {
     const form = document.querySelector('form'); if (!form) return false;
     const setInput = (name, value) => { const input = form.elements.namedItem(name); if (!input) return; const proto = input.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto, 'value').set.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); };
-    setInput('name', 'Кофейня E2E'); setInput('typeCode', 'coffee'); setInput('city', 'Алматы'); setInput('address', 'ул. Тестовая, 11'); setInput('employeeCount', '3'); setInput('branchCount', '1'); setInput('avgCheck', '2800'); setInput('offerings', 'Капучино, Круассан'); setInput('repeatVisitDays', '7');
+    setInput('name', 'Барбершоп E2E'); setInput('city', 'Алматы'); setInput('address', 'ул. Тестовая, 11'); setInput('employeeCount', '3'); setInput('branchCount', '1'); setInput('socials', 'Instagram: @e2e_barber, WhatsApp: +7 700 123 45 67, Telegram: @e2e_barber, TikTok: @e2e_barber, 2GIS');
     [...form.querySelectorAll('input[name="goals"]')].forEach((input) => { input.checked = ['create_site','return_customers','launch_loyalty'].includes(input.value); });
     form.requestSubmit(); return true;
   })()`);
@@ -148,13 +200,82 @@ try {
   await waitForText(client, 'План роста для');
   const newPublicPath = await evaluate(client, `document.querySelector('a[href^="/b/"]')?.getAttribute('href')`);
   if (!newPublicPath) throw new Error('Онбординг не создал публичный сайт');
-  results.push('onboarding + growth plan');
+  await assertPage(client, newPublicPath, 'Мужская стрижка');
+  await waitForText(client, 'Онлайн-запись');
+  await waitForText(client, 'Telegram');
+  const socialHrefs = await evaluate(client, `[...document.querySelectorAll('a')].map((node) => node.href)`);
+  for (const expected of ['instagram.com/e2e_barber', 'wa.me/77001234567', 't.me/e2e_barber', 'tiktok.com/@e2e_barber']) if (!socialHrefs.some((href) => href.includes(expected))) throw new Error(`Соцсеть не распознана: ${expected}`);
+  results.push('barbershop onboarding + exact growth plan + published site');
+
+  const siteDescription = `Описание E2E ${Date.now()}`;
+  const catalogTitle = `Капучино E2E ${Date.now()}`;
+  const sectionTitle = `О проекте E2E ${Date.now()}`;
+  const catalogHeading = `Услуги E2E ${Date.now()}`;
+  const catalogCategory = 'Ужас';
+  const sitePhone = '+7 700 123 45 67';
+  const siteColor = '#a13f55';
+  await navigate(client, '/dashboard/site');
+  await waitForText(client, 'Живой предпросмотр');
+  const siteEdited = await evaluate(client, `(() => {
+    const setInput = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    const setArea = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+    const description = document.querySelector('textarea');
+    const color = document.querySelector('input[type="color"]');
+    const font = [...document.querySelectorAll('select')].find((select) => select.parentElement?.innerText.includes('Шрифт сайта'));
+    if (!description || !color || !font) return 'foundation-missing';
+    setArea.call(description, ${JSON.stringify(siteDescription)}); description.dispatchEvent(new Event('input', { bubbles: true }));
+    setInput.call(color, ${JSON.stringify(siteColor)}); color.dispatchEvent(new Event('input', { bubbles: true })); color.dispatchEvent(new Event('change', { bubbles: true }));
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(font, 'editorial'); font.dispatchEvent(new Event('change', { bubbles: true }));
+    const phone = [...document.querySelectorAll('label')].find((label) => label.textContent.trim().startsWith('Телефон'))?.querySelector('input');
+    if (!phone) return 'phone-missing'; setInput.call(phone, ${JSON.stringify(sitePhone)}); phone.dispatchEvent(new Event('input', { bubbles: true }));
+    const fileInputs = [...document.querySelectorAll('input[type="file"]')]; const logoInput = fileInputs[0]; const coverInput = fileInputs[1]; if (!logoInput || !coverInput) return 'assets-missing';
+    const binary = atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=');
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0)); const transfer = new DataTransfer(); transfer.items.add(new File([bytes], 'e2e-logo.png', { type: 'image/png' })); logoInput.files = transfer.files; logoInput.dispatchEvent(new Event('change', { bubbles: true }));
+    const coverTransfer = new DataTransfer(); coverTransfer.items.add(new File([bytes], 'e2e-cover.png', { type: 'image/png' })); coverInput.files = coverTransfer.files; coverInput.dispatchEvent(new Event('change', { bubbles: true }));
+    const catalogSummary = [...document.querySelectorAll('summary')].find((node) => node.innerText.toLocaleLowerCase('ru').startsWith('каталог'));
+    const details = catalogSummary?.parentElement; if (!details) return 'catalog-missing'; details.open = true;
+    [...details.querySelectorAll('button')].find((button) => button.innerText.trim() === 'Добавить')?.click();
+    return 'ok';
+  })()`);
+  if (siteEdited !== 'ok') throw new Error(`Редактор сайта не найден: ${siteEdited}`);
+  await sleep(500);
+  if (!(await evaluate(client, `Boolean(document.querySelector('[aria-label="Логотип"]'))`))) throw new Error('Логотип не появился в живом предпросмотре');
+  if (!(await evaluate(client, `document.querySelector('[data-site-preview-hero]')?.style.backgroundImage.includes('data:image')`))) throw new Error('Обложка не появилась в живом предпросмотре');
+  const sectionEdited = await evaluate(client, `(() => { const label = [...document.querySelectorAll('label')].find((node) => node.textContent.trim() === 'О нас'); const input = label?.parentElement?.querySelector('input:not([type="checkbox"])'); if (!input) return false; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(sectionTitle)}); input.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+  if (!sectionEdited) throw new Error('Секции сайта не редактируются');
+  const catalogEdited = await evaluate(client, `(() => {
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    const headingLabel = [...document.querySelectorAll('label')].find((label) => label.textContent.includes('Заголовок каталога')); const heading = headingLabel?.querySelector('input'); if (!heading) return false; set.call(heading, ${JSON.stringify(catalogHeading)}); heading.dispatchEvent(new Event('input', { bubbles: true }));
+    const values = [['Название позиции', ${JSON.stringify(catalogTitle)}], ['Цена', '2400'], ['Категория', ${JSON.stringify(catalogCategory)}], ['Описание', 'Проверенная позиция каталога']];
+    for (const [label, value] of values) { const input = document.querySelector('input[aria-label="' + label + '"]'); if (!input) return false; set.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true })); }
+    return true;
+  })()`);
+  if (!catalogEdited) throw new Error('Каталог сайта не редактируется');
+  await waitForText(client, catalogTitle);
+  await waitForText(client, catalogHeading);
+  await waitForText(client, catalogCategory);
+  await evaluate(client, `[...document.querySelectorAll('button')].find((button) => button.innerText.trim().toLocaleLowerCase('ru') === 'опубликовать')?.click()`);
+  await waitForText(client, 'Сайт опубликован и данные сохранены');
+  await assertPage(client, newPublicPath, siteDescription);
+  await waitForText(client, catalogTitle);
+  await waitForText(client, catalogHeading);
+  await waitForText(client, catalogCategory);
+  await waitForText(client, sectionTitle);
+  await waitForText(client, sitePhone);
+  if (!(await evaluate(client, `Boolean(document.querySelector('[aria-label="Логотип"]'))`))) throw new Error('Логотип не появился на опубликованном сайте');
+  const publicTheme = await evaluate(client, `(() => { const themed = document.querySelector('[style*="--color-brand"]'); return { color: themed?.style.getPropertyValue('--color-brand'), editorial: themed?.classList.contains('font-display') }; })()`);
+  if (publicTheme.color !== siteColor || !publicTheme.editorial) throw new Error(`Тема публичного сайта не применилась: ${JSON.stringify(publicTheme)}`);
+  await navigate(client, '/dashboard/site');
+  const sitePersisted = await evaluate(client, `(() => ({ description: document.querySelector('textarea')?.value, catalog: document.querySelector('input[aria-label="Название позиции"]')?.value, category: document.querySelector('input[aria-label="Категория"]')?.value, heading: [...document.querySelectorAll('label')].find((label) => label.textContent.includes('Заголовок каталога'))?.querySelector('input')?.value, color: document.querySelector('input[type="color"]')?.value, font: [...document.querySelectorAll('select')].find((select) => select.parentElement?.textContent.includes('Шрифт сайта'))?.value, phone: [...document.querySelectorAll('label')].find((label) => label.textContent.trim().startsWith('Телефон'))?.querySelector('input')?.value, logo: [...document.querySelectorAll('[style*="background-image"]')].some((node) => node.style.backgroundImage.includes('data:image')) }))()`);
+  if (sitePersisted.description !== siteDescription || sitePersisted.catalog !== catalogTitle || sitePersisted.category !== catalogCategory || sitePersisted.heading !== catalogHeading || sitePersisted.color !== siteColor || sitePersisted.font !== 'editorial' || sitePersisted.phone !== sitePhone || !sitePersisted.logo) throw new Error(`Настройки сайта не сохранились: ${JSON.stringify(sitePersisted)}`);
+  results.push('site live preview + publish + persistence');
+
   await assertPage(client, '/dashboard/qr', 'QR-код бизнеса'); results.push('business QR');
 
   await navigate(client, '/dashboard/staff');
   await evaluate(client, `[...document.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('пригласить'))?.click()`);
   await waitForText(client, 'Новый сотрудник');
-  const staffSubmitted = await evaluate(client, `(() => { const heading = [...document.querySelectorAll('h2')].find((node) => node.innerText.toLocaleLowerCase('ru').includes('новый сотрудник')); const card = heading?.parentElement; const inputs = card?.querySelectorAll('input'); if (!inputs || inputs.length < 3) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; ['Кассир E2E','e2e-cashier@localy.kz','Localy2026'].forEach((value, index) => { set.call(inputs[index], value); inputs[index].dispatchEvent(new Event('input', { bubbles: true })); }); [...card.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('создать доступ'))?.click(); return true; })()`);
+  const staffSubmitted = await evaluate(client, `(() => { const heading = [...document.querySelectorAll('h2')].find((node) => node.innerText.toLocaleLowerCase('ru').includes('новый сотрудник')); const card = heading?.parentElement; const inputs = card?.querySelectorAll('input'); if (!inputs || inputs.length < 3) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; ['Кассир E2E','e2e-cashier@localy.kz','Localy2026!X'].forEach((value, index) => { set.call(inputs[index], value); inputs[index].dispatchEvent(new Event('input', { bubbles: true })); }); [...card.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('создать доступ'))?.click(); return true; })()`);
   if (!staffSubmitted) throw new Error('Не удалось заполнить приглашение кассира');
   await waitForText(client, 'Сотрудник приглашён'); results.push('staff invite');
 
@@ -163,9 +284,12 @@ try {
   await navigate(client, joinPath);
   const joined = await evaluate(client, `(() => { const form = document.querySelector('form'); if (!form) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; const name = form.elements.namedItem('name'); const phone = form.elements.namedItem('phone'); set.call(name, 'Тестовый Клиент'); name.dispatchEvent(new Event('input', { bubbles: true })); set.call(phone, '+7 700 555 20 31'); phone.dispatchEvent(new Event('input', { bubbles: true })); form.requestSubmit(); return true; })()`);
   if (!joined) throw new Error('Форма вступления не найдена');
-  await waitForPath(client, '/me'); await waitForText(client, 'Ваш QR действует во всех заведениях'); results.push('customer join + universal QR');
+  await waitForText(client, 'Код отправлен');
+  const verified = await evaluate(client, `(() => { const codeNode = document.querySelector('[data-dev-code]'); const code = codeNode?.getAttribute('data-dev-code'); const input = document.querySelector('input[name="verificationCode"]'); if (!code || !input) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(input, code); input.dispatchEvent(new Event('input', { bubbles: true })); input.form?.requestSubmit(); return true; })()`);
+  if (!verified) throw new Error('Локальный OTP не найден');
+  await waitForPath(client, '/me'); await waitForText(client, 'Ваш QR действует во всех заведениях'); await waitForText(client, 'Мои карты'); results.push('customer join + isolated customer shell + universal QR');
 
-  await login(client, 'e2e-cashier@localy.kz', '/pos');
+  await login(client, 'e2e-cashier@localy.kz', '/pos', 'Localy2026!X');
   const foundClient = await evaluate(client, `(() => { const input = document.querySelector('input[placeholder*="QR"]'); if (!input) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(input, '+7 700 555 20 31'); input.dispatchEvent(new Event('input', { bubbles: true })); [...document.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('найти клиента'))?.click(); return true; })()`);
   if (!foundClient) throw new Error('Поиск клиента в кассе не найден');
   await waitForText(client, 'Тестовый Клиент');
@@ -174,10 +298,101 @@ try {
 
   await login(client, 'owner@localy.kz', '/dashboard');
   await assertPage(client, '/dashboard/crm', 'Тестовый Клиент'); results.push('purchase in CRM');
+
+  await navigate(client, '/tools');
+  const depositsToolReady = await evaluate(client, `(() => { const card = document.querySelector('[data-tool-id="tool_deposits"]'); if (!card) return false; const add = [...card.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('добавить в мои')); if (add) add.click(); return true; })()`);
+  if (!depositsToolReady) throw new Error('Сертификаты отсутствуют в каталоге барбершопа');
+  for (let attempt = 0; attempt < 100; attempt += 1) { await sleep(100); if (await evaluate(client, `Boolean(document.querySelector('[data-tool-id="tool_deposits"] a[href="/tools/tool_deposits"]'))`)) break; }
+  await navigate(client, '/tools/tool_deposits');
+  await waitForText(client, 'Выпустить');
+  const depositCreated = await evaluate(client, `(() => { const inputs = [...document.querySelectorAll('input')]; const title = inputs.find((input) => input.parentElement?.innerText.includes('Название')); const balance = inputs.find((input) => input.parentElement?.innerText.includes('Номинал')); if (!title || !balance) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(title, 'Сертификат E2E'); title.dispatchEvent(new Event('input', { bubbles: true })); set.call(balance, '15000'); balance.dispatchEvent(new Event('input', { bubbles: true })); [...document.querySelectorAll('button')].find((button) => button.innerText.trim().toLocaleLowerCase('ru') === 'выпустить')?.click(); return true; })()`);
+  if (!depositCreated) throw new Error('Форма выпуска сертификата не работает');
+  await waitForText(client, 'Выпущено и сохранено');
+  await waitForText(client, 'Сертификат E2E');
+  const persistedDepositState = JSON.parse(readFileSync(join(testDataDir, 'localy.json'), 'utf8'));
+  if (!persistedDepositState.deposits.some((deposit) => deposit.title === 'Сертификат E2E' && deposit.balance === 15000)) throw new Error('Сертификат не сохранился в постоянное хранилище');
+  results.push('certificate issue persisted for a real CRM customer');
+
+  const promoTitle = `Акция E2E ${Date.now()}`;
+  await navigate(client, '/dashboard/promos/new');
+  const acquisitionMode = await evaluate(client, `(() => { const select = document.querySelector('select[aria-label="Цель акции"]'); if (!select) return false; const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(select, 'new_customers'); select.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+  if (!acquisitionMode) throw new Error('Не удалось выбрать цель привлечения новых клиентов');
+  await waitForText(client, 'Без выбора CRM-сегмента');
+  if (await evaluate(client, `Boolean(document.querySelector('select[aria-label="Сегмент акции"]'))`)) throw new Error('Для новых клиентов ошибочно показан CRM-сегмент');
+  const invalidForecastHandled = await evaluate(client, `(() => { const label = [...document.querySelectorAll('label')].find((node) => node.innerText.includes('Размер (')); const input = label?.querySelector('input'); if (!input) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(input, '0'); input.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+  if (!invalidForecastHandled) throw new Error('Поле размера предложения не найдено');
+  await waitForText(client, 'Укажите корректный размер предложения');
+  const rawServerError = await evaluate(client, `document.body.innerText.includes('Server Components render') || Boolean(document.querySelector('nextjs-portal'))`);
+  if (rawServerError) throw new Error('Ожидаемая ошибка формы попала в системный Server Components error');
+  await evaluate(client, `(() => { const label = [...document.querySelectorAll('label')].find((node) => node.innerText.includes('Размер (')); const input = label?.querySelector('input'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(input, '15'); input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  await waitForText(client, 'Ожидаемая выручка');
+  const acquisitionPlacementsReady = await evaluate(client, `(() => { const labels = [...document.querySelectorAll('label')]; const checked = (text) => labels.find((label) => label.innerText.includes(text))?.querySelector('input[type="checkbox"]')?.checked; const cashier = labels.find((label) => label.innerText.includes('Можно применить на кассе'))?.querySelector('input[type="checkbox"]'); return checked('На публичном сайте') && checked('На странице после QR') && cashier?.checked && cashier?.disabled; })()`);
+  if (!acquisitionPlacementsReady) throw new Error('Публичные размещения или обязательная касса настроены неверно');
+  await sleep(200);
+  const promoCreated = await evaluate(client, `(() => {
+    const title = [...document.querySelectorAll('label')].find((label) => label.innerText.includes('Заголовок'))?.querySelector('input');
+    const body = document.querySelector('textarea');
+    if (!title || !body) return false;
+    const setInput = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    const setArea = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+    setInput.call(title, ${JSON.stringify(promoTitle)}); title.dispatchEvent(new Event('input', { bubbles: true }));
+    setArea.call(body, 'Скидка для проверки полного сценария'); body.dispatchEvent(new Event('input', { bubbles: true }));
+    [...document.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('сохранить черновик'))?.click();
+    return true;
+  })()`);
+  if (!promoCreated) throw new Error('Конструктор акции не найден');
+  const promoPath = await waitForDifferentPath(client, '/dashboard/promos/new');
+  if (!promoPath.startsWith('/dashboard/promos/')) throw new Error(`Акция открылась по неверному пути: ${promoPath}`);
+  await waitForText(client, promoTitle);
+  await waitForText(client, 'Привлечь новых клиентов');
+  await waitForText(client, 'оценочный охват');
+  await waitForText(client, 'Прогноз до запуска');
+  await evaluate(client, `[...document.querySelectorAll('button')].find((button) => button.innerText.trim().toLocaleLowerCase('ru') === 'редактировать')?.click()`);
+  await waitForText(client, 'После изменения механики Localy заново считает');
+  const promoEdited = await evaluate(client, `(() => { const label = [...document.querySelectorAll('label')].find((node) => node.innerText.includes('Размер предложения')); const input = label?.querySelector('input'); if (!input) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(input, '20'); input.dispatchEvent(new Event('input', { bubbles: true })); [...document.querySelectorAll('button')].find((button) => button.innerText.trim().toLocaleLowerCase('ru') === 'сохранить')?.click(); return true; })()`);
+  if (!promoEdited) throw new Error('Редактор черновика акции не найден');
+  await waitForText(client, 'Изменения и прогноз сохранены');
+  await assertPage(client, '/dashboard/promos', promoTitle);
+  await waitForText(client, 'публичный охват');
+  await navigate(client, promoPath);
+  await evaluate(client, `[...document.querySelectorAll('button')].find((button) => button.innerText.trim().toLocaleLowerCase('ru') === 'запустить акцию')?.click()`);
+  await waitForText(client, 'Выручка с акции');
+  results.push('public acquisition promo without fake CRM audience + edit + recalculated forecast + launch');
+
+  await login(client, 'e2e-cashier@localy.kz', '/pos', 'Localy2026!X');
+  const promoPurchase = await evaluate(client, `(() => {
+    const search = document.querySelector('input[placeholder*="QR"]'); if (!search) return false;
+    const setInput = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setInput.call(search, '+7 700 555 20 31'); search.dispatchEvent(new Event('input', { bubbles: true }));
+    [...document.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('найти клиента'))?.click();
+    return true;
+  })()`);
+  if (!promoPurchase) throw new Error('Повторная покупка с акцией не началась');
+  await waitForText(client, 'Тестовый Клиент');
+  const promoApplied = await evaluate(client, `(() => {
+    const setInput = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    const amount = document.querySelector('input[placeholder="2400"]'); const items = document.querySelector('input[placeholder*="Капучино"]');
+    const promoSelect = [...document.querySelectorAll('select')].find((select) => [...select.options].some((option) => option.text.includes(${JSON.stringify(promoTitle)})));
+    const promoOption = promoSelect && [...promoSelect.options].find((option) => option.text.includes(${JSON.stringify(promoTitle)}));
+    if (!amount || !items || !promoSelect || !promoOption) return false;
+    setInput.call(amount, '2800'); amount.dispatchEvent(new Event('input', { bubbles: true })); setInput.call(items, 'Капучино E2E'); items.dispatchEvent(new Event('input', { bubbles: true }));
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(promoSelect, promoOption.value); promoSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    [...document.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('провести'))?.click(); return true;
+  })()`);
+  if (!promoApplied) throw new Error('Акция не появилась в кассе');
+  await waitForText(client, 'Покупка проведена');
+  await login(client, 'owner@localy.kz', '/dashboard');
+  await assertPage(client, promoPath, 'Использовали');
+  const redeemedCount = await evaluate(client, `(() => { const label = [...document.querySelectorAll('span')].find((node) => node.innerText.trim() === 'Использовали'); return label?.parentElement?.querySelectorAll('span')[1]?.innerText ?? ''; })()`);
+  if (!redeemedCount || redeemedCount.trim().startsWith('0')) throw new Error(`Кассовое применение не попало в воронку: ${redeemedCount}`);
+  results.push('promo redemption in POS + real funnel event');
+
   await navigate(client, '/dashboard/campaigns');
-  const campaignStarted = await evaluate(client, `(() => { const textarea = document.querySelector('textarea'); if (!textarea) return false; const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(textarea, '{name}, вернитесь за бонусами!'); textarea.dispatchEvent(new Event('input', { bubbles: true })); [...document.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('запустить рассылку'))?.click(); return true; })()`);
+  const campaignStarted = await evaluate(client, `(() => { const textarea = document.querySelector('textarea'); if (!textarea) return false; const promoSelect = [...document.querySelectorAll('select')].find((select) => [...select.options].some((option) => option.text.includes(${JSON.stringify(promoTitle)}))); if (!promoSelect) return false; const promoOption = [...promoSelect.options].find((option) => option.text.includes(${JSON.stringify(promoTitle)})); const setSelect = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; setSelect.call(promoSelect, promoOption.value); promoSelect.dispatchEvent(new Event('change', { bubbles: true })); const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(textarea, '{name}, вернитесь за бонусами!'); textarea.dispatchEvent(new Event('input', { bubbles: true })); [...document.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('запустить рассылку'))?.click(); return true; })()`);
   if (!campaignStarted) throw new Error('Конструктор рассылки не найден');
-  await waitForText(client, 'Отправлено на'); results.push('campaign send + result');
+  await waitForText(client, 'Отправлено на');
+  await assertPage(client, newPublicPath, promoTitle);
+  results.push('campaign simulation + public promo visibility without fake delivery funnel');
   await assertPage(client, '/dashboard/analytics', 'Выручка'); results.push('analytics after purchase');
 
   await login(client, 'cashier@localy.kz', '/pos');
@@ -204,6 +419,9 @@ try {
   const leadSubmitted = await evaluate(client, `(() => { const message = document.querySelector('textarea[name="message"]'); const form = message?.form; if (!message || !form) return false; const setInput = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; const setArea = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; const name = form.elements.namedItem('name'); const phone = form.elements.namedItem('phone'); setInput.call(name, 'Лид E2E'); name.dispatchEvent(new Event('input', { bubbles: true })); setInput.call(phone, '+7 700 777 88 99'); phone.dispatchEvent(new Event('input', { bubbles: true })); setArea.call(message, 'Хочу узнать о заказе'); message.dispatchEvent(new Event('input', { bubbles: true })); form.requestSubmit(); return true; })()`);
   if (!leadSubmitted) throw new Error('Публичная форма заявки не найдена');
   await waitForText(client, 'Заявка отправлена'); results.push('public lead form');
+  const browserCookies = await client.send('Network.getAllCookies');
+  if (browserCookies.cookies.some((cookie) => cookie.name === 'localy_customer')) throw new Error('Публичная заявка выдала клиентскую сессию без OTP');
+  results.push('public form does not authenticate');
 
   console.log(`E2E smoke OK (${results.length}):\n- ${results.join('\n- ')}`);
 } finally {

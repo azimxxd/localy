@@ -9,9 +9,10 @@ export default async function SiteBuilderPage() {
   await requireSession(['owner', 'admin']);
   const repo = await getRepo();
   const business = await getActiveBusiness();
-  const [stored, templates] = await Promise.all([
+  const [stored, templates, loyalty] = await Promise.all([
     repo.getSiteConfig(business.id),
     repo.listTemplates(business.typeCode),
+    repo.getLoyaltyConfig(business.id),
   ]);
   const initial = stored ?? {
     businessId: business.id,
@@ -27,7 +28,7 @@ export default async function SiteBuilderPage() {
         <div><p className="ascii-kicker">Конструктор сайта</p><h1 className="mt-1 text-2xl uppercase tracking-[0.1em] text-ink">Сайт бизнеса</h1><p className="mt-1 text-sm text-ink-soft">Сначала настройте основу. Каталог и контакты можно раскрыть ниже.</p></div>
         <Link href={`/b/${business.slug}`} target="_blank" className={btnClass('secondary')}>Открыть опубликованный сайт ↗</Link>
       </header>
-      <SiteEditor businessId={business.id} businessName={business.name} initial={initial} templates={templates} />
+      <SiteEditor businessId={business.id} businessName={business.name} businessCity={business.city} loyalty={loyalty} initial={initial} templates={templates} />
     </div>
   );
 }
