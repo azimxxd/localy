@@ -1087,10 +1087,14 @@ export function createMockRepo(options: StateRepoOptions = {}): Repo {
         ? s.customers.find((item) => item.id === input.customerId)
         : s.customers.find((item) => item.qrToken === input.qrToken);
       if (!customer) throw new Error('Клиент или QR-код не распознан');
-      if (!input.customerId) {
-        const ageSeconds = (Date.now() - new Date(customer.qrRotatedAt).getTime()) / 1000;
-        if (ageSeconds > QR_ROTATION_SECONDS + 5) throw new Error('QR-код истёк. Попросите клиента обновить его');
+      // Операция должна быть привязана к одной и той же карте. Раньше при
+      // переданном customerId токен вообще не сверялся — после повторного
+      // скана или старого экрана можно было записать покупку не тому человеку.
+      if (input.customerId && input.qrToken !== customer.qrToken) {
+        throw new Error('Карта клиента изменилась. Попросите клиента отсканировать QR ещё раз.');
       }
+      const ageSeconds = (Date.now() - new Date(customer.qrRotatedAt).getTime()) / 1000;
+      if (ageSeconds > QR_ROTATION_SECONDS + 5) throw new Error('QR-код истёк. Попросите клиента обновить его');
 
       const loyalty = loyaltyOf(input.businessId);
 
@@ -1310,7 +1314,11 @@ export function createMockRepo(options: StateRepoOptions = {}): Repo {
       const promo = s.promos.find((p) => p.id === id);
       if (!promo) throw new Error(`Акция ${id} не найдена`);
 
-      promo.status = promo.startsAt > nowIso() ? 'scheduled' : 'active';
+      const at = nowIso();
+      if (!Number.isFinite(new Date(promo.endsAt).getTime()) || promo.endsAt <= at) {
+        throw new Error('Срок акции уже прошёл. Измените дату окончания и запустите её снова.');
+      }
+      promo.status = promo.startsAt > at ? 'scheduled' : 'active';
       if (promo.audienceMode === 'public' || promo.goal === 'new_customers') {
         logAction(promo.businessId, promo.status === 'scheduled' ? 'promo_scheduled' : 'promo_launched', promo.status === 'scheduled' ? `Акция «${promo.title}» запланирована` : `Публичная акция «${promo.title}» запущена`, { promoId: promo.id, estimatedReach: promo.audienceSize });
         return clone(promo);
@@ -1732,14 +1740,20 @@ export function createMockRepo(options: StateRepoOptions = {}): Repo {
       };
 
       s.promos.forEach((promo) => {
+        const endsAt = new Date(promo.endsAt).getTime();
+        // Сначала закрываем просрочку. Иначе старая запланированная акция,
+        // до которой дошёл cron уже после её окончания, на один запуск
+        // становилась active и затем «сама выключалась» следующим запуском.
+        if ((promo.status === 'active' || promo.status === 'scheduled') && (!Number.isFinite(endsAt) || endsAt <= Date.parse(at))) {
+          promo.status = 'finished';
+          logAction(promo.businessId, 'promo_finished', `Акция «${promo.title}» завершена`, { promoId: promo.id, automated: true });
+          record(promo.businessId, 'promo_finish', `Акция «${promo.title}» завершена по сроку`);
+          return;
+        }
         if (promo.status === 'scheduled' && promo.startsAt <= at) {
           promo.status = 'active';
           logAction(promo.businessId, 'promo_launched', `Акция «${promo.title}» запущена по расписанию`, { promoId: promo.id, automated: true });
           record(promo.businessId, 'promo_launch', `Акция «${promo.title}» запущена по расписанию`);
-        } else if ((promo.status === 'active' || promo.status === 'scheduled') && promo.endsAt < at) {
-          promo.status = 'finished';
-          logAction(promo.businessId, 'promo_finished', `Акция «${promo.title}» завершена`, { promoId: promo.id, automated: true });
-          record(promo.businessId, 'promo_finish', `Акция «${promo.title}» завершена по сроку`);
         }
       });
 

@@ -317,6 +317,11 @@ try {
 
   await login(client, 'owner@localy.kz', '/dashboard');
   await assertPage(client, '/dashboard/crm', 'Тестовый Клиент'); results.push('purchase in CRM');
+  const purchasedCustomerHref = await evaluate(client, `(() => { const row = [...document.querySelectorAll('a[href^="/dashboard/crm/"]')].find((node) => node.innerText.includes('Тестовый Клиент')); return row?.getAttribute('href') ?? null; })()`);
+  if (!purchasedCustomerHref) throw new Error('После покупки нет ссылки на карточку клиента');
+  await assertPage(client, purchasedCustomerHref, 'Капучино, Круассан');
+  await waitForText(client, 'История');
+  results.push('POS purchase linked to exact customer history');
 
   await navigate(client, '/tools');
   const depositsToolReady = await evaluate(client, `(() => { const card = document.querySelector('[data-tool-id="tool_deposits"]'); if (!card) return false; const add = [...card.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('добавить в мои')); if (add) add.click(); return true; })()`);

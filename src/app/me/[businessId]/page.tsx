@@ -104,6 +104,7 @@ export default async function MeBusinessPage({
                       {t.items.length ? ` · ${t.items.join(', ')}` : ''}
                     </p>
                     <p className="text-xs text-ink-soft">{dateShort(t.createdAt)}</p>
+                    {t.status === 'pending_confirmation' ? <Badge tone="warning" className="mt-1">Ожидает подтверждения</Badge> : null}
                   </div>
                   <div className="text-right">
                     {t.amount > 0 ? <p className="text-sm tnum">{kzt(t.amount)}</p> : null}

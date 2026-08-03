@@ -9,6 +9,7 @@
  */
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { resolveClient, submitPurchase, type ResolvedClient } from '@/app/pos/actions';
 import { Badge, Button, Card, TextInput } from '@/components/ui/kit';
 import type { PosPurchaseResult } from '@/lib/repo';
@@ -20,12 +21,14 @@ export default function PosTerminal({
   businessId,
   businessName,
   staffId,
+  canOpenCrm,
   pointsPerCurrency,
   promos,
 }: {
   businessId: string;
   businessName: string;
   staffId: string;
+  canOpenCrm: boolean;
   pointsPerCurrency: number;
   promos: { id: string; title: string; promocode: string }[];
 }) {
@@ -116,7 +119,17 @@ export default function PosTerminal({
           <p className="text-3xl font-bold tnum text-brand">
             {num(result.membership.points)} бонусов
           </p>
-          <p className="text-sm text-ink-soft">Баланс клиента после операции</p>
+          <p className="text-sm text-ink-soft">
+            {client?.customer.name ?? 'Клиент'} · баланс после операции
+          </p>
+          <div className="rounded-xl border border-line bg-canvas px-3 py-2 text-left text-sm">
+            <p className="font-medium text-ink">
+              {result.transaction.items.length ? result.transaction.items.join(', ') : 'Покупка'}
+            </p>
+            <p className="text-xs text-ink-soft">
+              {kzt(result.transaction.amount)} · {result.transaction.status === 'completed' ? 'записано в историю' : 'ожидает подтверждения'}
+            </p>
+          </div>
           {result.rewardUnlocked ? (
             <p className="rounded-xl bg-ok-soft px-3 py-2 text-sm font-medium text-ok">
               Достигнут порог награды — выдайте её клиенту
@@ -124,8 +137,16 @@ export default function PosTerminal({
           ) : null}
           {result.requiresConfirmation ? (
             <p className="rounded-xl bg-warn-soft px-3 py-2 text-sm text-warn">
-            Бонусы и покупка ещё не записаны. Попросите клиента подтвердить списание в своём кабинете.
+            Покупка уже появилась в истории, но списание бонусов завершится после подтверждения клиента в его кабинете.
             </p>
+          ) : null}
+          {canOpenCrm ? (
+            <Link
+              href={`/dashboard/crm/${result.transaction.customerId}`}
+              className="block text-sm text-brand underline underline-offset-2"
+            >
+              Открыть карточку клиента и историю
+            </Link>
           ) : null}
           <Button className="w-full" onClick={reset}>
             Следующий клиент

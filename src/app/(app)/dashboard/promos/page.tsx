@@ -53,7 +53,7 @@ export default async function PromosPage() {
                     <Badge tone={STATUS_TONE[p.status]}>{PROMO_STATUS_LABELS[p.status]}</Badge>
                   </div>
                   <p className="mt-0.5 truncate text-xs text-ink-soft">
-                    {p.goal ? PROMO_GOAL_LABELS[p.goal] : PROMO_KIND_LABELS[p.kind]} · {p.audienceMode === 'public' || p.goal === 'new_customers' ? `публичный охват ≈ ${num(p.audienceSize)}` : `${SEGMENT_META[p.segment].title} · ${num(p.audienceSize)} чел`} · с {dateShort(p.startsAt)}
+                    {p.goal ? PROMO_GOAL_LABELS[p.goal] : PROMO_KIND_LABELS[p.kind]} · {p.audienceMode === 'public' || p.goal === 'new_customers' ? `публичный охват ≈ ${num(p.audienceSize)}` : `${SEGMENT_META[p.segment].title} · ${num(p.audienceSize)} чел`} · {p.status === 'active' ? `до ${dateShort(p.endsAt)}` : `с ${dateShort(p.startsAt)} до ${dateShort(p.endsAt)}`}
                   </p>
                 </div>
                 {p.forecast ? (

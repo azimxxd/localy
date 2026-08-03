@@ -9,25 +9,34 @@
  */
 
 import { useRouter } from 'next/navigation';
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { launchPromo } from '@/app/(app)/dashboard/promos/actions';
 import { Button } from '@/components/ui/kit';
 
 export default function LaunchButton({ promoId }: { promoId: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   return (
-    <Button
-      onClick={() =>
-        start(async () => {
-          await launchPromo(promoId);
-          router.refresh();
-        })
-      }
-      disabled={pending}
-    >
-      {pending ? 'Запускаем…' : 'Запустить акцию'}
-    </Button>
+    <div>
+      <Button
+        onClick={() =>
+          start(async () => {
+            setError(null);
+            try {
+              await launchPromo(promoId);
+              router.refresh();
+            } catch (cause) {
+              setError(cause instanceof Error ? cause.message : 'Не удалось запустить акцию');
+            }
+          })
+        }
+        disabled={pending}
+      >
+        {pending ? 'Запускаем…' : 'Запустить акцию'}
+      </Button>
+      {error ? <p role="alert" className="mt-2 border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p> : null}
+    </div>
   );
 }

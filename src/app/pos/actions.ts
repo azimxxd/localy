@@ -9,6 +9,7 @@
  * подписчиков (экран владельца обновляется сам).
  */
 
+import { revalidatePath } from 'next/cache';
 import { getRepo } from '@/lib/repo';
 import type { PosPurchaseInput, PosPurchaseResult } from '@/lib/repo';
 import type { Customer, Membership } from '@/lib/types';
@@ -100,7 +101,22 @@ export async function submitPurchase(
     claimReward: input.claimReward,
   };
   try {
-    return await repo.recordPurchase(payload);
+    const result = await repo.recordPurchase(payload);
+    // Касса меняет не только свой экран: баланс, CRM-профиль, историю клиента,
+    // аналитику и воронку акции. Инвалидируем их одним кадром после успешной
+    // атомарной операции, иначе Next может отдать старый server-component.
+    revalidatePath(`/dashboard/crm/${payload.customerId}`);
+    revalidatePath('/dashboard/crm');
+    revalidatePath('/dashboard/analytics');
+    revalidatePath(`/me/${payload.businessId}`);
+    revalidatePath('/me');
+    if (payload.promoId) {
+      revalidatePath(`/dashboard/promos/${payload.promoId}`);
+      revalidatePath('/dashboard/promos');
+      revalidatePath('/b/[slug]', 'page');
+      revalidatePath('/join/[slug]', 'page');
+    }
+    return result;
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Не удалось провести покупку' };
   }

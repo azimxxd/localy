@@ -79,7 +79,16 @@ export async function launchPromoNowAction(id: string): Promise<Promo> {
   const existing = await repo.getPromo(id);
   if (!existing) throw new Error('Акция не найдена');
   await requireBusinessAccess(existing.businessId, ['owner', 'admin', 'marketer']);
-  await repo.updatePromo(id, { startsAt: new Date().toISOString(), status: 'draft' });
+  const now = new Date();
+  const previousDuration = new Date(existing.endsAt).getTime() - new Date(existing.startsAt).getTime();
+  // Черновик мог лежать дольше выбранного срока. Не запускаем его с уже
+  // прошедшим endsAt: это и выглядело как «акция сама выключилась». Сохраняем
+  // прежнюю длительность, но переносим окно от текущего момента.
+  const durationMs = Number.isFinite(previousDuration)
+    ? Math.min(60, Math.max(1, Math.ceil(previousDuration / 86_400_000))) * 86_400_000
+    : 14 * 86_400_000;
+  const endsAt = new Date(now.getTime() + durationMs).toISOString();
+  await repo.updatePromo(id, { startsAt: now.toISOString(), endsAt, status: 'draft' });
   const promo = await repo.launchPromo(id);
   revalidatePath(`/dashboard/promos/${id}`);
   revalidatePath('/dashboard/promos');

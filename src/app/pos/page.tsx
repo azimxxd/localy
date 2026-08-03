@@ -26,6 +26,7 @@ export default async function PosPage() {
       businessId={business.id}
       businessName={business.name}
       staffId={session.staffId ?? cashier?.id ?? 'stf_demo'}
+      canOpenCrm={session.role !== 'cashier'}
       pointsPerCurrency={loyalty.pointsPerCurrency}
       promos={promos.filter((promo) => promo.status === 'active' && (!promo.placements || promo.placements.includes('cashier')) && (!promo.branchId || promo.branchId === cashier?.branchId)).map((promo) => ({ id: promo.id, title: promo.title, promocode: promo.promocode }))}
     />
