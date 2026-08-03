@@ -23,7 +23,7 @@ export interface ResolvedClient {
   visitsToReward: number;
 }
 
-/** Ищем клиента по QR-токену, а если не вышло — по телефону. */
+/** Ищем клиента по динамическому QR, постоянному коду, телефону или ID. */
 export async function resolveClient(
   businessId: string,
   code: string,
@@ -34,17 +34,21 @@ export async function resolveClient(
   if (!trimmed) return { error: 'Введите QR-код или телефон' };
 
   let customer = await repo.resolveQrToken(trimmed);
-  if (!customer && trimmed.startsWith('qr_')) {
-    return { error: 'QR-код истёк. Попросите клиента открыть карту заново.' };
-  }
   if (!customer) customer = await repo.findCustomerByPhone(trimmed);
+  // Реферальный код — постоянный код клиента. Он не является QR-токеном и
+  // не должен попадать под проверку срока действия QR.
+  if (!customer) customer = await repo.findCustomerByReferralCode(trimmed);
   if (!customer) customer = await repo.getCustomer(trimmed);
   if (!customer && trimmed.length >= 2) {
     const matches = await repo.listCustomerProfiles(businessId, { search: trimmed, limit: 2 });
     if (matches.length === 1) customer = matches[0].customer;
     if (matches.length > 1) return { error: 'Найдено несколько клиентов. Уточните имя или введите телефон.' };
   }
-  if (!customer) return { error: 'Клиент не найден. Проверьте код или телефон.' };
+  if (!customer) {
+    return trimmed.toLowerCase().startsWith('qr_')
+      ? { error: 'QR-код истёк. Для кассы можно ввести постоянный код клиента или попросить открыть карту заново.' }
+      : { error: 'Клиент не найден. Проверьте постоянный код, телефон или ID.' };
+  }
 
   const membership = await repo.getMembership(businessId, customer.id);
   const loyalty = await repo.getLoyaltyConfig(businessId);

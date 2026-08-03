@@ -162,8 +162,8 @@ export default function PosTerminal({
         <Card className="space-y-3">
           <QrScanner onScan={(value) => { setCode(value); onResolve(value); }} />
           <TextInput
-            label="QR, имя, телефон, ID или код карты"
-            placeholder="Отсканируйте QR или введите данные"
+            label="QR, телефон, ID или постоянный код клиента"
+            placeholder="QR, телефон или код из реферальной системы"
             value={code}
             onChange={(e) => setCode(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && onResolve()}

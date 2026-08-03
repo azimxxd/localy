@@ -311,8 +311,14 @@ try {
   if (!(await evaluate(client, `Boolean(document.querySelector('a[href="/me"]'))`))) throw new Error('Авторизованный клиент снова отправлен на регистрацию');
   results.push('public site sends signed-in customer directly to profile');
 
+  await navigate(client, '/me');
+  await evaluate(client, `[...document.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('реферальная система'))?.click()`);
+  await waitForText(client, 'Ваш код');
+  const stableCustomerCode = await evaluate(client, `(() => { const label = [...document.querySelectorAll('p')].find((node) => node.innerText.trim().toLocaleLowerCase('ru') === 'ваш код'); return label?.nextElementSibling?.innerText.trim() ?? null; })()`);
+  if (!stableCustomerCode) throw new Error('Постоянный код клиента не найден');
+
   await login(client, 'e2e-cashier@localy.kz', '/pos', 'Localy2026!X');
-  const foundClient = await evaluate(client, `(() => { const input = document.querySelector('input[placeholder*="QR"]'); if (!input) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(input, '+7 700 555 20 31'); input.dispatchEvent(new Event('input', { bubbles: true })); [...document.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('найти клиента'))?.click(); return true; })()`);
+  const foundClient = await evaluate(client, `(() => { const input = document.querySelector('input[placeholder*="QR"]'); if (!input) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(input, ${JSON.stringify(stableCustomerCode)}); input.dispatchEvent(new Event('input', { bubbles: true })); [...document.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('найти клиента'))?.click(); return true; })()`);
   if (!foundClient) throw new Error('Поиск клиента в кассе не найден');
   await waitForText(client, 'Тестовый Клиент');
   await evaluate(client, `(() => { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; const amount = document.querySelector('input[placeholder="2400"]'); const items = document.querySelector('input[placeholder*="Капучино"]'); set.call(amount, '3500'); amount.dispatchEvent(new Event('input', { bubbles: true })); set.call(items, 'Капучино, Круассан'); items.dispatchEvent(new Event('input', { bubbles: true })); [...document.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('провести'))?.click(); })()`);
