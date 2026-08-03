@@ -45,5 +45,8 @@ next-env.d.ts
 /data/localy.json
 /data/localy.json.tmp
 
+# Supabase CLI link metadata and local service versions
+/supabase/.temp/
+
 # skills, установленные локально через npx skills
 /.agents

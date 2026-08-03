@@ -50,6 +50,11 @@ export async function resolveClient(
       : { error: 'Клиент не найден. Проверьте постоянный код, телефон или ID.' };
   }
 
+  // Постоянный код, телефон и ID не содержат актуальный QR. Обновляем
+  // технический токен перед формой покупки, чтобы касса не принимала код,
+  // но затем отклоняла сам чек из-за срока старого QR.
+  customer = await repo.rotateQrToken(customer.id);
+
   const membership = await repo.getMembership(businessId, customer.id);
   const loyalty = await repo.getLoyaltyConfig(businessId);
   const every = loyalty.rewardEveryVisits ?? 6;
