@@ -74,8 +74,8 @@ export function promoTextTemplate(input: PromoTextInput): PromoText {
   switch (input.kind) {
     case 'discount':
       return {
-        title: `Скидка ${v}% ${tone}`,
-        body: `Дарим ${v}% на ${noun} — предложение ${tone}. Покажите промокод на кассе.`,
+        title: `Скидка ${v}% на ${noun}`,
+        body: `Скидка ${v}% на ${noun} — предложение ${tone}. Покажите промокод на кассе.`,
       };
     case 'coupon':
       return {
@@ -114,8 +114,8 @@ export function promoTextTemplate(input: PromoTextInput): PromoText {
       };
     case 'winback':
       return {
-        title: 'Мы соскучились',
-        body: `Давно вас не видели в «${input.businessName}». Возвращайтесь — дарим ${v}% на ${noun}.`,
+        title: `Скидка ${v}% на ${noun}`,
+        body: `Давно вас не видели в «${input.businessName}». Возвращайтесь — получите скидку ${v}% на ${noun}.`,
       };
     case 'birthday':
       return {

@@ -23,7 +23,7 @@ export const TOOL_RUNTIME: Record<string, ToolRuntime> = {
   tool_loyalty: { href: '/dashboard/loyalty', action: 'Настроить лояльность', outcome: 'Начисление, списание, уровни и награды' },
   tool_crm: { href: '/dashboard/crm', action: 'Открыть клиентскую базу', outcome: 'Карточки клиентов, визиты, чеки и бонусы' },
   tool_segments: { href: '/dashboard/crm', action: 'Открыть сегменты', outcome: 'Автоматически пересчитанные группы клиентов' },
-  tool_winback: { href: '/dashboard/promos/new?goal=return_customers&kind=winback', action: 'Вернуть клиентов', outcome: 'Акция для тех, кто выбился из своей частоты визитов' },
+  tool_winback: { href: '/dashboard/promos/new?goal=return_customers&kind=discount', action: 'Вернуть клиентов', outcome: 'Понятная скидка для тех, кто давно не приходил' },
   tool_expiring: { href: '/dashboard/campaigns?segment=expiring_points', action: 'Подготовить напоминание', outcome: 'Выбор клиентов со сгорающими бонусами и проверка согласий' },
   tool_return_reward: { href: '/dashboard/promos/new?goal=increase_frequency&kind=return_reward', action: 'Создать награду', outcome: 'Предложение на следующий визит и кассовый учёт' },
   tool_personal: { href: '/tools/tool_personal', action: 'Открыть предложения', outcome: 'Приоритетный список клиентов и персональные поводы' },

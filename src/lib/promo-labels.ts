@@ -45,7 +45,7 @@ export const PROMO_KIND_LABELS: Record<PromoKind, string> = {
   double_points: 'Двойные бонусы',
   return_reward: 'Награда за возврат',
   item_promo: 'Акция на товар',
-  winback: 'Возврат ушедших',
+  winback: 'Скидка для возврата',
   birthday: 'Подарок на день рождения',
   referral: 'Приведи друга',
 };

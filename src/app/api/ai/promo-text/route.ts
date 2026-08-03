@@ -86,6 +86,7 @@ export async function POST(request: Request) {
     `Заведение: «${business.name}», ${business.city}.`,
     `Тип бизнеса: ${business.typeCode}. Средний чек: ${business.avgCheck} ₸.`,
     `Тип акции: ${kind}. Размер: ${value}.`,
+    kind === 'discount' ? `Важно: это скидка ${value}%. Обязательно называй её скидкой и пиши, что клиент заплатит на ${value}% меньше. Не называй это подарком, бонусами, кэшбэком или формулировкой «дарим ${value}%».` : '',
     goal === 'new_customers' ? 'Аудитория: люди, которые ещё не были клиентами заведения. Не пиши так, будто они уже есть в CRM.' : `Аудитория: ${SEGMENT_META[segment].title} — ${SEGMENT_META[segment].description}.`,
     segmentInfo ? `Размер аудитории: ${segmentInfo.count} человек.` : 'Текст должен звать на первый визит.',
     `Награда программы лояльности: ${loyalty.rewardTitle}.`,
