@@ -20,7 +20,7 @@ export default async function LoginPage() {
           <p className="mt-2 text-sm text-ink-soft">
             Здесь только управление бизнесом: CRM, акции, рассылки, сайт и аналитика.
           </p>
-          <Link href="/discover" className="mt-3 inline-block text-sm text-brand underline underline-offset-4">Я клиент — открыть мои бонусы</Link>
+          <Link href="/me" className="mt-3 inline-block text-sm text-brand underline underline-offset-4">Я клиент — открыть мои бонусы</Link>
         </div>
         <Card className="p-6">
           <LoginForm />

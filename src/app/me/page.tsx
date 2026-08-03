@@ -11,6 +11,7 @@
 import Link from 'next/link';
 import ClientQr from '@/components/me/ClientQr';
 import PendingPurchase from '@/components/me/PendingPurchase';
+import ReferralSystem from '@/components/me/ReferralSystem';
 import { Card } from '@/components/ui/kit';
 import { DEMO_CUSTOMER_ID } from '@/lib/demo';
 import { kzt, num, plural } from '@/lib/format';
@@ -79,22 +80,14 @@ export default async function MePage() {
       ))) : null}
 
       {cards.length > 0 ? (
-        <Card className="space-y-2 p-4">
-          <p className="ascii-kicker">Приведите друга</p>
-          <p className="text-sm text-ink-soft">
-            Ваш код приглашения — <strong className="tnum text-ink">{referralCode}</strong>. После первой покупки друга
-            бонусы получите оба.
-          </p>
-          <ul className="space-y-1 text-sm">
-            {cards.map(({ business }) => (
-              <li key={business.id} className="truncate">
-                <Link className="text-brand hover:underline" href={`/join/${business.slug}?ref=${referralCode}`}>
-                  Ссылка для «{business.name}»
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Card>
+        <ReferralSystem
+          referralCode={referralCode}
+          businesses={cards.map(({ business }) => ({
+            id: business.id,
+            name: business.name,
+            slug: business.slug,
+          }))}
+        />
       ) : null}
 
       <section className="space-y-3">
