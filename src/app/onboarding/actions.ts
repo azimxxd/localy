@@ -147,7 +147,6 @@ export async function completeOnboarding(
     { kind: 'promos', enabled: true, title: 'Акции', body: 'Актуальные предложения для гостей.' },
     { kind: 'loyalty', enabled: true, title: 'Бонусная программа', body: `5% бонусами. Награда: ${rewardTitle}.` },
     { kind: 'booking', enabled: ['barber', 'beauty', 'repair'].includes(typeCode), title: 'Онлайн-запись', body: 'Выберите услугу и удобное время.' },
-    { kind: 'lead', enabled: !['barber', 'beauty', 'repair'].includes(typeCode), title: 'Оставить заявку', body: 'Задайте вопрос или закажите обратный звонок.' },
     { kind: 'contacts', enabled: true, title: 'Контакты', body: address },
   ];
   await repo.updateSiteConfig(business.id, {

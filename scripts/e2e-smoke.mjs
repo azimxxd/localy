@@ -455,9 +455,9 @@ try {
   const publicPath = await evaluate(client, `document.querySelector('a[href^="/b/"]')?.getAttribute('href')`);
   if (!publicPath) throw new Error('В каталоге нет публичного бизнеса');
   await assertPage(client, publicPath, 'Получить бонусную карту'); results.push(`public ${publicPath}`);
-  const leadSubmitted = await evaluate(client, `(() => { const message = document.querySelector('textarea[name="message"]'); const form = message?.form; if (!message || !form) return false; const setInput = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; const setArea = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; const name = form.elements.namedItem('name'); const phone = form.elements.namedItem('phone'); setInput.call(name, 'Лид E2E'); name.dispatchEvent(new Event('input', { bubbles: true })); setInput.call(phone, '+7 700 777 88 99'); phone.dispatchEvent(new Event('input', { bubbles: true })); setArea.call(message, 'Хочу узнать о заказе'); message.dispatchEvent(new Event('input', { bubbles: true })); form.requestSubmit(); return true; })()`);
-  if (!leadSubmitted) throw new Error('Публичная форма заявки не найдена');
-  await waitForText(client, 'Заявка отправлена'); results.push('public lead form');
+  const leadUi = await evaluate(client, `(() => ({ heading: document.body.innerText.includes('Оставить заявку'), form: Boolean(document.querySelector('textarea[name="message"]')), anchor: Boolean(document.querySelector('#lead')) }))()`);
+  if (leadUi.heading || leadUi.form || leadUi.anchor) throw new Error(`Публичная форма заявки осталась: ${JSON.stringify(leadUi)}`);
+  results.push('public lead form removed');
   const browserCookies = await client.send('Network.getAllCookies');
   if (browserCookies.cookies.some((cookie) => cookie.name === 'localy_customer')) throw new Error('Публичная заявка выдала клиентскую сессию без OTP');
   results.push('public form does not authenticate');

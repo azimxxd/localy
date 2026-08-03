@@ -14,7 +14,6 @@ import { getRepo } from '@/lib/repo';
 import Link from 'next/link';
 import { getCustomerSessionId } from '@/lib/auth';
 import PublicBookingForm from '@/components/site/PublicBookingForm';
-import PublicLeadForm from '@/components/site/PublicLeadForm';
 import { accessibleBrandColor, brandOnDarkColor, contrastTextColor } from '@/lib/site-theme';
 import type { CSSProperties } from 'react';
 
@@ -95,7 +94,6 @@ export default async function BusinessSitePage({
   const sections = site.sections.filter((s) => s.enabled);
   const catalog = (site.catalog ?? []).filter((item) => item.active);
   const bookingEnabled = sections.some((section) => section.kind === 'booking');
-  const leadEnabled = sections.some((section) => section.kind === 'lead');
   const services = [...new Set([...(catalog.map((item) => item.title)), ...(business.offerings ?? [])])].slice(0, 12);
   const socialTokens = site.socials?.length
     ? site.socials
@@ -134,7 +132,6 @@ export default async function BusinessSitePage({
         {catalog.length ? <a href="#catalog">{catalogTitle}</a> : null}
         {activePromos.length ? <a href="#promos">Акции</a> : null}
         {bookingEnabled ? <a href="#booking">Запись</a> : null}
-        {leadEnabled ? <a href="#lead">Заявка</a> : null}
         {branches.length ? <a href="#contacts">Адрес</a> : null}
       </nav>
 
@@ -193,7 +190,6 @@ export default async function BusinessSitePage({
         ) : null}
 
         {bookingEnabled ? <section id="booking" className="scroll-mt-4 space-y-2"><h2 className="font-semibold uppercase text-brand">Онлайн-запись</h2><PublicBookingForm slug={business.slug} services={services.length ? services : ['Консультация']} slots={slots.filter((slot) => slot.taken < slot.capacity).slice(0, 60).map((slot) => ({ at: slot.at, free: slot.capacity - slot.taken }))} /></section> : null}
-        {leadEnabled ? <section id="lead" className="scroll-mt-16 space-y-2"><h2 className="font-semibold uppercase text-brand">Оставить заявку</h2><PublicLeadForm slug={business.slug} /></section> : null}
 
         {site?.workHours || site?.phone || socialTokens.length ? <Card className="text-sm text-ink-soft"><p className="font-semibold text-ink">График и связь</p>{site.workHours ? <p className="mt-1">{site.workHours}</p> : null}{site.phone ? <p>{site.phone}</p> : null}<div className="mt-2 flex flex-wrap gap-3">{socialTokens.map((token, index) => <SocialContact key={`${token}_${index}`} token={token} />)}</div></Card> : null}
 
