@@ -306,7 +306,10 @@ try {
   await waitForText(client, 'Код отправлен');
   const verified = await evaluate(client, `(() => { const codeNode = document.querySelector('[data-dev-code]'); const code = codeNode?.getAttribute('data-dev-code'); const input = document.querySelector('input[name="verificationCode"]'); if (!code || !input) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(input, code); input.dispatchEvent(new Event('input', { bubbles: true })); input.form?.requestSubmit(); return true; })()`);
   if (!verified) throw new Error('Локальный OTP не найден');
-  await waitForPath(client, '/me'); await waitForText(client, 'Ваш QR действует во всех заведениях'); await waitForText(client, 'Мои карты'); results.push('customer join + isolated customer shell + universal QR');
+  await waitForPath(client, '/me'); await waitForText(client, 'Ваш QR действует во всех заведениях'); await waitForText(client, 'Мои карты');
+  const customerNavText = await evaluate(client, '[...document.querySelectorAll("[aria-label=\'Клиентская навигация\'], [aria-label=\'Мобильная клиентская навигация\']")].map((node) => node.innerText).join(" ")');
+  if (customerNavText.includes('Заведения')) throw new Error('Ссылка «Заведения» осталась в клиентской навигации');
+  results.push('customer join + isolated customer shell + universal QR');
   await assertPage(client, newPublicPath, 'Открыть мой профиль');
   if (!(await evaluate(client, `Boolean(document.querySelector('a[href="/me"]'))`))) throw new Error('Авторизованный клиент снова отправлен на регистрацию');
   results.push('public site sends signed-in customer directly to profile');
