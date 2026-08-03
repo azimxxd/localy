@@ -18,6 +18,11 @@ import PublicLeadForm from '@/components/site/PublicLeadForm';
 import { accessibleBrandColor, brandOnDarkColor, contrastTextColor } from '@/lib/site-theme';
 import type { CSSProperties } from 'react';
 
+// CTA зависит от customer-cookie: анонимный и авторизованный посетитель
+// должны получать разные ссылки, поэтому публичную страницу нельзя отдавать
+// из общего статического кэша.
+export const dynamic = 'force-dynamic';
+
 const TEMPLATE_ART: Record<string, string> = {
   tpl_site_coffee: '   ( (\n    ) )\n  ........\n  |      |]\n  \\      /\n    ----',
   tpl_site_barber: '   /\\ /\\\n  (  X  )\n   \\/ \\/',
