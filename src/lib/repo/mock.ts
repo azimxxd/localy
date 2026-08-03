@@ -70,6 +70,7 @@ import {
   type Transaction,
   type User,
 } from '@/lib/types';
+import { promoSavingsFor } from '@/lib/promo-runtime';
 
 // ─────────────────────────────────────────────────────────────
 // Состояние
@@ -1116,16 +1117,19 @@ export function createMockRepo(options: StateRepoOptions = {}): Repo {
       if (input.promoId && (!promo || promo.status !== 'active' || promo.endsAt < nowIso())) throw new Error('Акция недоступна или завершена');
       if (promo?.placements && !promo.placements.includes('cashier')) throw new Error('Эту акцию нельзя применить на кассе');
       if (promo?.branchId && promo.branchId !== input.branchId) throw new Error('Акция не действует в этом филиале');
+      const originalAmount = Math.round(input.amount);
+      const discountAmount = promo ? promoSavingsFor(promo, originalAmount, input.items) : 0;
+      const chargedAmount = Math.max(0, originalAmount - discountAmount);
       const hasExcludedItem = input.items.some((item) => excluded.includes(item.toLowerCase()));
-      let accrued = hasExcludedItem ? 0 : Math.round(input.amount * loyalty.pointsPerCurrency);
+      let accrued = hasExcludedItem ? 0 : Math.round(chargedAmount * loyalty.pointsPerCurrency);
       if (promo?.kind === 'double_points') accrued *= 2;
-      if (promo?.kind === 'points') accrued += promo.value;
+      if (promo?.kind === 'points' || promo?.kind === 'referral') accrued += promo.value;
       const pointsDelta = accrued - redeem;
-      const maxRedeem = Math.floor(input.amount * ((loyalty.maxRedemptionPercent ?? 20) / 100));
+      const maxRedeem = Math.floor(chargedAmount * ((loyalty.maxRedemptionPercent ?? 20) / 100));
       if (redeem > maxRedeem) {
         throw new Error(`Можно списать не более ${maxRedeem} бонусов (${loyalty.maxRedemptionPercent ?? 20}% чека)`);
       }
-      if (input.amount < (loyalty.minPurchaseAmount ?? 0)) {
+      if (originalAmount < (loyalty.minPurchaseAmount ?? 0)) {
         throw new Error(`Минимальная сумма для бонусов — ${loyalty.minPurchaseAmount} ₸`);
       }
       const requiresConfirmation = redeem > REDEEM_CONFIRM_THRESHOLD;
@@ -1133,7 +1137,11 @@ export function createMockRepo(options: StateRepoOptions = {}): Repo {
       const earnedRewards = Math.floor(membership.visits / every);
       const rewardAvailable = earnedRewards > (membership.claimedVisitRewards ?? 0);
       if (input.claimReward && !rewardAvailable) throw new Error('Награда пока недоступна');
-      const rewardTitle = input.claimReward ? loyalty.rewardTitle : promo?.kind === 'gift' ? promo.title : null;
+      const rewardTitle = input.claimReward
+        ? loyalty.rewardTitle
+        : promo && ['gift', 'birthday'].includes(promo.kind)
+          ? promo.title
+          : null;
 
       const transaction: Transaction = {
         id: uid('trx'),
@@ -1141,7 +1149,9 @@ export function createMockRepo(options: StateRepoOptions = {}): Repo {
         branchId: input.branchId,
         customerId: customer.id,
         staffId: input.staffId,
-        amount: input.amount,
+        amount: chargedAmount,
+        originalAmount: discountAmount > 0 ? originalAmount : undefined,
+        discountAmount: discountAmount > 0 ? discountAmount : undefined,
         pointsDelta,
         accruedPoints: accrued,
         redeemedPoints: redeem,

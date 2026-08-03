@@ -307,6 +307,9 @@ try {
   const verified = await evaluate(client, `(() => { const codeNode = document.querySelector('[data-dev-code]'); const code = codeNode?.getAttribute('data-dev-code'); const input = document.querySelector('input[name="verificationCode"]'); if (!code || !input) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(input, code); input.dispatchEvent(new Event('input', { bubbles: true })); input.form?.requestSubmit(); return true; })()`);
   if (!verified) throw new Error('Локальный OTP не найден');
   await waitForPath(client, '/me'); await waitForText(client, 'Ваш QR действует во всех заведениях'); await waitForText(client, 'Мои карты'); results.push('customer join + isolated customer shell + universal QR');
+  await assertPage(client, newPublicPath, 'Открыть мой профиль');
+  if (!(await evaluate(client, `Boolean(document.querySelector('a[href="/me"]'))`))) throw new Error('Авторизованный клиент снова отправлен на регистрацию');
+  results.push('public site sends signed-in customer directly to profile');
 
   await login(client, 'e2e-cashier@localy.kz', '/pos', 'Localy2026!X');
   const foundClient = await evaluate(client, `(() => { const input = document.querySelector('input[placeholder*="QR"]'); if (!input) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(input, '+7 700 555 20 31'); input.dispatchEvent(new Event('input', { bubbles: true })); [...document.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('найти клиента'))?.click(); return true; })()`);
@@ -405,6 +408,9 @@ try {
   })()`);
   if (!promoApplied) throw new Error('Акция не появилась в кассе');
   await waitForText(client, 'Покупка проведена');
+  const promoReceiptText = await evaluate(client, 'document.body.innerText');
+  const normalizedPromoReceipt = promoReceiptText.replace(/\u00a0/g, ' ');
+  if (!normalizedPromoReceipt.toLocaleLowerCase('ru').includes('скидка') || !normalizedPromoReceipt.includes('2 240 ₸')) throw new Error(`Выбранная скидка не изменила чек кассы: ${promoReceiptText.slice(-500)}`);
   await login(client, 'owner@localy.kz', '/dashboard');
   await assertPage(client, promoPath, 'Использовали');
   const redeemedCount = await evaluate(client, `(() => { const label = [...document.querySelectorAll('span')].find((node) => node.innerText.trim() === 'Использовали'); return label?.parentElement?.querySelectorAll('span')[1]?.innerText ?? ''; })()`);

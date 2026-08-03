@@ -12,6 +12,7 @@ import { num } from '@/lib/format';
 import { PROMO_KIND_LABELS } from '@/lib/promo-labels';
 import { getRepo } from '@/lib/repo';
 import Link from 'next/link';
+import { getCustomerSessionId } from '@/lib/auth';
 import PublicBookingForm from '@/components/site/PublicBookingForm';
 import PublicLeadForm from '@/components/site/PublicLeadForm';
 import { accessibleBrandColor, brandOnDarkColor, contrastTextColor } from '@/lib/site-theme';
@@ -80,6 +81,9 @@ export default async function BusinessSitePage({
     repo.listBranches(business.id),
     repo.listBookingSlots(business.id),
   ]);
+  const customerSessionId = await getCustomerSessionId();
+  const customerCtaHref = customerSessionId ? '/me' : `/join/${business.slug}`;
+  const customerCtaLabel = customerSessionId ? 'Открыть мой профиль' : 'Получить бонусную карту';
 
   if (!site?.published) notFound();
   const activePromos = promos.filter((p) => p.status === 'active' && (!p.placements || p.placements.includes('site')));
@@ -101,7 +105,7 @@ export default async function BusinessSitePage({
       ? { href: '#catalog', label: 'Выбрать букет' }
       : business.typeCode === 'retail'
         ? { href: '#catalog', label: 'Открыть каталог' }
-        : { href: `/join/${business.slug}`, label: 'Получить бонусную карту' };
+        : { href: customerCtaHref, label: customerCtaLabel };
   return (
     <div className={`public-site min-h-dvh bg-canvas sm:px-6 sm:py-6 ${SITE_FONT_CLASS[site.fontStyle ?? 'clean']}`} style={{ '--color-brand': readableBrand } as CSSProperties}>
       <div className="mx-auto max-w-3xl bg-surface sm:border sm:border-line">
@@ -118,7 +122,7 @@ export default async function BusinessSitePage({
         >
           {primaryCta.label}
         </Link>
-        {primaryCta.href !== `/join/${business.slug}` ? <Link href={`/join/${business.slug}`} className="mt-3 block px-3 py-2 text-xs font-semibold uppercase tracking-wide sm:ml-2 sm:inline-block" style={{ color: heroBrand }}>Бонусная карта →</Link> : null}
+        {primaryCta.href !== customerCtaHref ? <Link href={customerCtaHref} className="mt-3 block px-3 py-2 text-xs font-semibold uppercase tracking-wide sm:ml-2 sm:inline-block" style={{ color: heroBrand }}>{customerCtaLabel} →</Link> : null}
       </div>
 
       <nav className="public-jump-nav sticky top-0 z-20 flex gap-2 overflow-x-auto border-b border-line bg-surface/95 px-4 py-3 text-sm font-semibold backdrop-blur">
@@ -195,7 +199,7 @@ export default async function BusinessSitePage({
         </div>
       </div>
       </div>
-      <div className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-2 gap-2 border-t border-line bg-surface/95 px-3 pb-[max(.6rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur sm:hidden"><a href={primaryCta.href} className="flex min-h-11 items-center justify-center bg-brand px-3 text-center text-sm font-semibold uppercase text-canvas">{primaryCta.label}</a><Link href={`/join/${business.slug}`} className="flex min-h-11 items-center justify-center border border-line px-3 text-center text-sm font-semibold text-ink">Бонусная карта</Link></div>
+      <div className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-2 gap-2 border-t border-line bg-surface/95 px-3 pb-[max(.6rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur sm:hidden"><a href={primaryCta.href} className="flex min-h-11 items-center justify-center bg-brand px-3 text-center text-sm font-semibold uppercase text-canvas">{primaryCta.label}</a><Link href={customerCtaHref} className="flex min-h-11 items-center justify-center border border-line px-3 text-center text-sm font-semibold text-ink">{customerCtaLabel}</Link></div>
     </div>
   );
 }

@@ -13,7 +13,9 @@ import Link from 'next/link';
 import { resolveClient, submitPurchase, type ResolvedClient } from '@/app/pos/actions';
 import { Badge, Button, Card, TextInput } from '@/components/ui/kit';
 import type { PosPurchaseResult } from '@/lib/repo';
+import type { PromoKind } from '@/lib/types';
 import { kzt, num } from '@/lib/format';
+import { promoEffectText, promoSavingsFor } from '@/lib/promo-runtime';
 import { REDEEM_CONFIRM_THRESHOLD } from '@/lib/types';
 import QrScanner from '@/components/pos/QrScanner';
 
@@ -30,7 +32,7 @@ export default function PosTerminal({
   staffId: string;
   canOpenCrm: boolean;
   pointsPerCurrency: number;
-  promos: { id: string; title: string; promocode: string }[];
+  promos: { id: string; title: string; promocode: string; kind: PromoKind; value: number }[];
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +48,10 @@ export default function PosTerminal({
 
   const [result, setResult] = useState<PosPurchaseResult | null>(null);
 
-  const accrualPreview = amount ? Math.round(Number(amount) * pointsPerCurrency) : 0;
+  const selectedPromo = promos.find((promo) => promo.id === promoId);
+  const promoSavings = selectedPromo ? promoSavingsFor(selectedPromo, Number(amount) || 0, items.split(',').map((item) => item.trim()).filter(Boolean)) : 0;
+  const payableAmount = Math.max(0, (Number(amount) || 0) - promoSavings);
+  const accrualPreview = amount ? Math.round(payableAmount * pointsPerCurrency) : 0;
 
   function reset() {
     setCode('');
@@ -127,7 +132,8 @@ export default function PosTerminal({
               {result.transaction.items.length ? result.transaction.items.join(', ') : 'Покупка'}
             </p>
             <p className="text-xs text-ink-soft">
-              {kzt(result.transaction.amount)} · {result.transaction.status === 'completed' ? 'записано в историю' : 'ожидает подтверждения'}
+              {result.transaction.originalAmount ? `${kzt(result.transaction.originalAmount)} → ${kzt(result.transaction.amount)} · скидка ${kzt(result.transaction.discountAmount ?? 0)}` : kzt(result.transaction.amount)}{' '}
+              · {result.transaction.status === 'completed' ? 'записано в историю' : 'ожидает подтверждения'}
             </p>
           </div>
           {result.rewardUnlocked ? (
@@ -197,6 +203,7 @@ export default function PosTerminal({
             value={items}
             onChange={(e) => setItems(e.target.value)}
           />
+          {selectedPromo ? <p className="rounded-xl border border-brand/30 bg-brand-soft px-3 py-2 text-sm text-brand-ink">{promoEffectText(selectedPromo, promoSavings)}{promoSavings > 0 ? ` · к оплате ${kzt(payableAmount)}` : ''}</p> : null}
           <TextInput
             label="Списать бонусов (необязательно)"
             inputMode="numeric"
@@ -215,7 +222,7 @@ export default function PosTerminal({
               Отмена
             </Button>
             <Button className="flex-1" onClick={onSubmit} disabled={pending || !amount}>
-              {pending ? 'Проводим…' : `Провести ${amount ? kzt(Number(amount)) : ''}`}
+              {pending ? 'Проводим…' : `Провести ${amount ? kzt(payableAmount) : ''}`}
             </Button>
           </div>
         </Card>

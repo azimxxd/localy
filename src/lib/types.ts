@@ -352,6 +352,10 @@ export interface Transaction {
   staffId: string | null;
   /** Сумма покупки в тенге. Для redeem/reward = 0. */
   amount: number;
+  /** Обычная сумма до скидки/купона, если акция изменила чек. */
+  originalAmount?: number;
+  /** Экономия по акции в тенге. */
+  discountAmount?: number;
   /** Изменение бонусного баланса: + начисление, − списание. */
   pointsDelta: number;
   accruedPoints?: number;
