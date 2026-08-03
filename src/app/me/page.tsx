@@ -36,7 +36,10 @@ export default async function MePage() {
   }
   const customerId = sessionCustomerId ?? DEMO_CUSTOMER_ID;
   const existingCustomer = await repo.getCustomer(customerId);
-  const customer = existingCustomer ? await repo.rotateQrToken(customerId) : null;
+  // Рендер страницы должен быть только чтением. Ротация QR выполняется
+  // клиентским таймером через server action: иначе параллельные RSC-запросы
+  // к /me конкурируют за одну versioned-запись в Supabase и ломают экран.
+  const customer = existingCustomer;
   if (!customer) {
     return <p className="p-6 text-ink-soft">Демо-клиент не найден.</p>;
   }

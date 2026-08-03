@@ -1902,8 +1902,14 @@ export function createMockRepo(options: StateRepoOptions = {}): Repo {
         const before = persistHook && db ? clone(db) : null;
         try {
           const result = await (original as (...callArgs: unknown[]) => unknown)(...args);
-          persist();
-          if (persistHook && db) await persistHook(clone(db));
+          // Например, rotateQrToken может вернуть уже актуальный QR, не меняя
+          // состояние. В Supabase такая пустая запись всё равно сдвигала
+          // версию и вызывала конфликт у параллельного рендера страницы.
+          const changed = !before || JSON.stringify(before) !== JSON.stringify(db);
+          if (changed) {
+            persist();
+            if (persistHook && db) await persistHook(clone(db));
+          }
           return result;
         } catch (error) {
           if (before) db = before;
