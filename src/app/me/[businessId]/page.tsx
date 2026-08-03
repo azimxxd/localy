@@ -17,6 +17,8 @@ import { getRepo } from '@/lib/repo';
 import { getCustomerSessionId } from '@/lib/auth';
 import ConsentPreferences from '@/components/me/ConsentPreferences';
 
+export const dynamic = 'force-dynamic';
+
 export default async function MeBusinessPage({
   params,
 }: {
@@ -47,6 +49,7 @@ export default async function MeBusinessPage({
   const progress = Math.min(1, visitProgress / rewardEvery);
   const expiryDaysLeft = loyalty.expiryDays === null ? null : Math.max(0, loyalty.expiryDays - Math.floor((nowMs - new Date(membership.lastSeen).getTime()) / 86_400_000));
   const offers = promos.filter((p) => p.status === 'active' && (!p.placements || p.placements.includes('client_app')));
+  const recentHistory = history.slice(0, 6);
 
   return (
     <div className="mx-auto max-w-md space-y-5 px-4 py-6">
@@ -90,13 +93,13 @@ export default async function MeBusinessPage({
       {sessionCustomerId ? <ConsentPreferences businessId={businessId} initial={membership.consentChannels} /> : null}
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase text-ink-soft">История</h2>
-        {history.length === 0 ? (
+        <h2 className="text-sm font-semibold uppercase text-ink-soft">Последние покупки</h2>
+        {recentHistory.length === 0 ? (
           <p className="text-sm text-ink-soft">Пока пусто.</p>
         ) : (
           <Card className="p-0">
             <ul className="divide-y divide-line">
-              {history.slice(0, 20).map((t) => (
+              {recentHistory.map((t) => (
                 <li key={t.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="min-w-0">
                     <p className="truncate text-sm text-ink">

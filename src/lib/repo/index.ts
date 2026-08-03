@@ -330,11 +330,10 @@ let cached: Repo | null = null;
  * переключаемся только явно: LOCALY_REPO=supabase.
  */
 export async function getRepo(): Promise<Repo> {
-  if (cached) return cached;
-
   const mode = process.env.LOCALY_REPO ?? 'json';
   if (!['json', 'supabase'].includes(mode)) throw new Error(`Неизвестный LOCALY_REPO=${mode}`);
   const useSupabase = mode === 'supabase';
+  if (!useSupabase && cached) return cached;
   if (useSupabase && (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY)) {
     throw new Error('Для LOCALY_REPO=supabase нужны NEXT_PUBLIC_SUPABASE_URL и SUPABASE_SERVICE_ROLE_KEY');
   }
@@ -346,6 +345,10 @@ export async function getRepo(): Promise<Repo> {
     ? await (await import('./supabase')).createSupabaseRepo()
     : (await import('./mock')).createMockRepo();
 
-  cached = repo;
+  // В Supabase один JSONB-снимок загружается при создании адаптера. Его нельзя
+  // держать в module cache: после покупки в другом serverless-инстансе профиль
+  // клиента иначе показывал устаревшую историю. JSON-режим для локальной работы
+  // по-прежнему кэшируем.
+  if (!useSupabase) cached = repo;
   return repo;
 }

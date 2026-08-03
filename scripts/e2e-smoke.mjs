@@ -319,6 +319,9 @@ try {
   await waitForText(client, 'Ваш код');
   const stableCustomerCode = await evaluate(client, `(() => { const label = [...document.querySelectorAll('p')].find((node) => node.innerText.trim().toLocaleLowerCase('ru') === 'ваш код'); return label?.nextElementSibling?.innerText.trim() ?? null; })()`);
   if (!stableCustomerCode) throw new Error('Постоянный код клиента не найден');
+  const customerBusinessHref = await evaluate(client, `(() => [...document.querySelectorAll('a[href^="/me/"]')].find((node) => node.innerText.includes('Барбершоп E2E'))?.getAttribute('href') ?? null)()`);
+  if (!customerBusinessHref) throw new Error('Не найдена клиентская карточка нового бизнеса');
+  const customerCookies = await client.send('Network.getAllCookies');
 
   await login(client, 'e2e-cashier@localy.kz', '/pos', 'Localy2026!X');
   const foundClient = await evaluate(client, `(() => { const input = document.querySelector('input[placeholder*="QR"]'); if (!input) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(input, ${JSON.stringify(stableCustomerCode)}); input.dispatchEvent(new Event('input', { bubbles: true })); [...document.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('найти клиента'))?.click(); return true; })()`);
@@ -326,6 +329,14 @@ try {
   await waitForText(client, 'Тестовый Клиент');
   await evaluate(client, `(() => { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; const amount = document.querySelector('input[placeholder="2400"]'); const items = document.querySelector('input[placeholder*="Капучино"]'); set.call(amount, '3500'); amount.dispatchEvent(new Event('input', { bubbles: true })); set.call(items, 'Капучино, Круассан'); items.dispatchEvent(new Event('input', { bubbles: true })); [...document.querySelectorAll('button')].find((button) => button.innerText.toLocaleLowerCase('ru').includes('провести'))?.click(); })()`);
   await waitForText(client, 'Покупка проведена'); results.push('POS purchase + points');
+
+  await client.send('Network.clearBrowserCookies');
+  await client.send('Network.setCookies', { cookies: customerCookies.cookies.filter((cookie) => cookie.name === 'localy_customer') });
+  await navigate(client, customerBusinessHref);
+  await waitForText(client, 'Капучино, Круассан');
+  const currentHistory = await evaluate(client, `(() => { const heading = [...document.querySelectorAll('h2')].find((node) => node.innerText.trim().toLocaleLowerCase('ru') === 'последние покупки'); const rows = heading?.parentElement?.querySelectorAll('li') ?? []; return { path: location.pathname, heading: heading?.innerText ?? null, count: rows.length, newest: rows[0]?.innerText ?? null, page: document.body.innerText.slice(0, 600) }; })()`);
+  if (currentHistory.heading?.toLocaleLowerCase('ru') !== 'последние покупки' || currentHistory.count > 6 || !currentHistory.newest?.includes('Капучино, Круассан')) throw new Error(`История клиента не обновилась после кассы: ${JSON.stringify(currentHistory)}`);
+  results.push('customer profile shows current six-purchase history');
 
   await login(client, 'owner@localy.kz', '/dashboard');
   await assertPage(client, '/dashboard/crm', 'Тестовый Клиент'); results.push('purchase in CRM');

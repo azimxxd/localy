@@ -11,6 +11,7 @@
  */
 
 import 'server-only';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
@@ -76,9 +77,22 @@ import { promoSavingsFor } from '@/lib/promo-runtime';
 // Состояние
 // ─────────────────────────────────────────────────────────────
 
-let db: SeedData | null = null;
-let persistLocal = true;
-let persistHook: ((data: SeedData) => Promise<void> | void) | null = null;
+interface RepoStore {
+  db: SeedData | null;
+  persistLocal: boolean;
+  persistHook: ((data: SeedData) => Promise<void> | void) | null;
+}
+
+// Один Node-инстанс Vercel обслуживает несколько запросов одновременно.
+// Состояние мок-репозитория должно принадлежать конкретной реализации Repo,
+// иначе свежий Supabase-снимок одного запроса подменяет данные другого.
+const repoStoreContext = new AsyncLocalStorage<RepoStore>();
+
+function currentStore(): RepoStore {
+  const store = repoStoreContext.getStore();
+  if (!store) throw new Error('Репозиторий Localy вызван вне контекста хранилища');
+  return store;
+}
 
 const DATA_FILE = process.env.LOCALY_DATA_FILE
   ? path.resolve(process.env.LOCALY_DATA_FILE)
@@ -86,15 +100,17 @@ const DATA_FILE = process.env.LOCALY_DATA_FILE
 const DATA_TMP_FILE = `${DATA_FILE}.tmp`;
 
 function persist() {
-  if (!db) return;
-  if (!persistLocal) return;
+  const store = currentStore();
+  if (!store.db) return;
+  if (!store.persistLocal) return;
   mkdirSync(path.dirname(DATA_FILE), { recursive: true });
-  writeFileSync(DATA_TMP_FILE, `${JSON.stringify(db, null, 2)}\n`, 'utf8');
+  writeFileSync(DATA_TMP_FILE, `${JSON.stringify(store.db, null, 2)}\n`, 'utf8');
   renameSync(DATA_TMP_FILE, DATA_FILE);
 }
 
 function state(): SeedData {
-  if (!db) {
+  const store = currentStore();
+  if (!store.db) {
     if (existsSync(DATA_FILE)) {
       const loaded = JSON.parse(readFileSync(DATA_FILE, 'utf8')) as SeedData;
       const seed = generateSeed();
@@ -123,7 +139,7 @@ function state(): SeedData {
         if (promoEvents.some((event) => event.promoId === promoId && event.stage === 'clicked')) return;
         promoEvents.filter((event) => event.promoId === promoId && event.stage === 'opened').filter((_, index) => index % 3 !== 2).forEach((event) => promoEvents.push({ ...event, stage: 'clicked' }));
       });
-      db = {
+      store.db = {
         ...seed,
         ...loaded,
         users: mergeMissingById(loaded.users, seed.users),
@@ -138,11 +154,11 @@ function state(): SeedData {
         promoEvents,
       };
     } else {
-      db = generateSeed();
+      store.db = generateSeed();
       persist();
     }
   }
-  return db;
+  return store.db;
 }
 
 /** Подписчики на новые транзакции: businessId → набор колбэков. */
@@ -456,9 +472,11 @@ export interface StateRepoOptions {
 }
 
 export function createMockRepo(options: StateRepoOptions = {}): Repo {
-  persistLocal = options.persistLocal ?? true;
-  persistHook = options.onPersist ?? null;
-  if (options.initialState) db = clone(options.initialState);
+  const store: RepoStore = {
+    db: options.initialState ? clone(options.initialState) : null,
+    persistLocal: options.persistLocal ?? true,
+    persistHook: options.onPersist ?? null,
+  };
   const repo: Repo = {
     // ── Пользователи и demo-auth ──
     async listUsers() {
@@ -491,7 +509,7 @@ export function createMockRepo(options: StateRepoOptions = {}): Repo {
     },
 
     async resetDemoData() {
-      db = generateSeed();
+      store.db = generateSeed();
     },
 
     // ── Справочники платформы ──
@@ -1891,31 +1909,32 @@ export function createMockRepo(options: StateRepoOptions = {}): Repo {
   return new Proxy(repo, {
     get(target, property, receiver) {
       const original = Reflect.get(target, property, receiver) as unknown;
-      if (
-        typeof property !== 'string' ||
-        !mutatingMethods.has(property as keyof Repo) ||
-        typeof original !== 'function'
-      ) {
-        return original;
+      if (typeof original !== 'function') return original;
+
+      if (typeof property !== 'string' || !mutatingMethods.has(property as keyof Repo)) {
+        return (...args: unknown[]) => repoStoreContext.run(store, () => (
+          original as (...callArgs: unknown[]) => unknown
+        )(...args));
       }
-      return async (...args: unknown[]) => {
-        const before = persistHook && db ? clone(db) : null;
+
+      return async (...args: unknown[]) => repoStoreContext.run(store, async () => {
+        const before = store.persistHook && store.db ? clone(store.db) : null;
         try {
           const result = await (original as (...callArgs: unknown[]) => unknown)(...args);
           // Например, rotateQrToken может вернуть уже актуальный QR, не меняя
           // состояние. В Supabase такая пустая запись всё равно сдвигала
           // версию и вызывала конфликт у параллельного рендера страницы.
-          const changed = !before || JSON.stringify(before) !== JSON.stringify(db);
+          const changed = !before || JSON.stringify(before) !== JSON.stringify(store.db);
           if (changed) {
             persist();
-            if (persistHook && db) await persistHook(clone(db));
+            if (store.persistHook && store.db) await store.persistHook(clone(store.db));
           }
           return result;
         } catch (error) {
-          if (before) db = before;
+          if (before) store.db = before;
           throw error;
         }
-      };
+      });
     },
   });
 }
